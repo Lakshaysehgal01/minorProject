@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+
+# Virtual environment
+ml-service/venv/
+.venv/
+
+
+# Trained model artifacts (regenerate with `python train.py`)
+ml-service/models/*
+!ml-service/models/.gitkeep
+ml-service/notebooks/plots/
+
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+
+# Generated data
+ml-service/data/synthetic_energy_data.csv
