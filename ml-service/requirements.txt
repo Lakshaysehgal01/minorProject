@@ -8,3 +8,21 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 pydantic==2.9.2
 joblib==1.4.2
+
+
+# Advanced models (models/train_lightgbm.py, train_prophet.py, train_lstm.py,
+# train_ensemble.py)
+lightgbm==4.7.0
+# First TensorFlow version with Python 3.13 Windows wheels; bundles Keras 3 as
+# tf.keras. On Windows, requires Long Path support enabled (see
+# https://pip.pypa.io/warnings/enable-long-paths) or the install fails while
+# unpacking tensorflow's deeply-nested headers.
+tensorflow==2.20.0
+# Pulls in cmdstanpy/holidays/stanio/tqdm. First use compiles a Stan model via
+# cmdstanpy, which can fail behind a restrictive proxy/firewall - if so,
+# models/train_prophet.py automatically falls back to a statsmodels SARIMAX.
+prophet==1.4.0
+statsmodels==0.14.4
+
+
+

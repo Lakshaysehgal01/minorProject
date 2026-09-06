@@ -66,6 +66,39 @@ def main():
     plt.close()
 
 
+    # --- Line plot: monthly-average solar generation, consumption, and temperature ---
+    monthly_avg = df.groupby("month")[
+        ["solar_generation_kwh", "consumption_kwh", "temperature"]
+    ].mean()
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax1.plot(monthly_avg.index, monthly_avg["solar_generation_kwh"], marker="o", label="Avg solar generation (kWh)")
+    ax1.plot(monthly_avg.index, monthly_avg["consumption_kwh"], marker="o", label="Avg consumption (kWh)")
+    ax1.set_xlabel("Month")
+    ax1.set_ylabel("kWh")
+    ax1.set_xticks(range(1, 13))
+    ax2 = ax1.twinx()
+    ax2.plot(monthly_avg.index, monthly_avg["temperature"], marker="s", color="gray", linestyle="--", label="Avg temperature (C)")
+    ax2.set_ylabel("Temperature (C)")
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper center")
+    plt.title("Monthly Seasonal Profile: Solar Generation, Consumption, and Temperature")
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "monthly_seasonal_profile.png"))
+    plt.close()
+
+
+    # --- Boxplot of consumption_kwh by household consumption profile tier ---
+    plt.figure(figsize=(8, 6))
+    sns.boxplot(data=df, x="consumption_profile", y="consumption_kwh", order=["small", "medium", "large"])
+    plt.xlabel("Consumption profile")
+    plt.ylabel("Consumption (kWh)")
+    plt.title("Consumption Distribution by Household Profile Tier")
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "consumption_boxplot_by_profile.png"))
+    plt.close()
+
+
     print(f"\nSaved plots to {PLOTS_DIR}/")
 
 

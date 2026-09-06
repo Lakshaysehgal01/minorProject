@@ -6,13 +6,24 @@ __pycache__/
 
 # Virtual environment
 ml-service/venv/
+ml-service/venv_gpu/
 .venv/
 
 
-# Trained model artifacts (regenerate with `python train.py`)
+# Trained model artifacts (regenerate with `python train.py` and the
+# models/train_*.py scripts) - the scripts themselves stay tracked.
 ml-service/models/*
 !ml-service/models/.gitkeep
+!ml-service/models/train_*.py
+!ml-service/models/metrics/
+ml-service/models/metrics/*
+!ml-service/models/metrics/.gitkeep
 ml-service/notebooks/plots/
+
+
+# Results artifacts (regenerate with `python results/model_comparison.py`)
+ml-service/results/*
+!ml-service/results/model_comparison.py
 
 
 # OS / editor cruft
@@ -24,3 +35,6 @@ Thumbs.db
 
 # Generated data
 ml-service/data/synthetic_energy_data.csv
+
+
+
