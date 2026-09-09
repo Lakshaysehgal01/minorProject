@@ -1,24 +1,12 @@
-# How to train the models on this machine (step-by-step, no coding knowledge needed)
-
-
-This guide walks you through every single step to train all the models for
-this project on a new/different computer. Just follow the steps in order,
-copy-pasting the commands exactly as written. You do not need to understand
-what the commands do — just type/paste them and press Enter.
-
-
-Everything in **`code blocks like this`** is a command you type into a
-terminal window. Everything else is an explanation.
-
+# How to train the models 
 
 ---
-
 
 ## Before you start
 
 
 You need:
-1. This whole project folder (`project234`, containing the `ml-service`
+1. This whole project folder ( containing the `ml-service`
    folder) copied onto the new computer.
 2. **Python** installed on the new computer (version 3.11, 3.12, or 3.13).
    - To check if Python is already installed, open a terminal (see next
@@ -48,7 +36,7 @@ white window where you type commands instead of clicking things.
 
 **On Windows:**
 1. Open File Explorer and navigate to the `ml-service` folder inside the
-   project folder (`project234\ml-service`).
+   project folder (`project\ml-service`).
 2. Click once on the empty white space inside the folder (not on any file).
 3. Type `cmd` and press Enter — a dark terminal window will open, already
    pointed at this folder. (Alternative: right-click inside the folder and
