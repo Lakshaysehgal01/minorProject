@@ -47,7 +47,7 @@ ensemble), and exposes them behind a REST prediction API.
   patterns in the data, including the added seasonality and household-tier
   signals.
 - Train and fairly compare a progression of models per target — Phase 1
-  baselines (Linear/SVR/Tree/RandomForest/XGBoost), then Prophet, LightGBM,
+  baselines (Linear/Tree/RandomForest/XGBoost), then Prophet, LightGBM,
   a pooled LSTM, and a stacking ensemble — using a time-respecting
   train/test (and train/validation/test) split throughout.
 - Persist every model as a reusable artifact and combine every result into
@@ -286,9 +286,6 @@ five regression algorithms each:
 
 
 - `LinearRegression`
-- `SVR` (wrapped in a pipeline with `StandardScaler`, since SVR is
-  scale-sensitive; tree-based models are trained on raw features since
-  they don't need scaling)
 - `DecisionTreeRegressor`
 - `RandomForestRegressor` (`n_estimators=200`, `max_depth=15`,
   `min_samples_leaf=25` — regularized to control model size/overfitting;
@@ -536,7 +533,7 @@ once the server is running.
 |---|---|
 | Data generation & manipulation | Python, NumPy, pandas |
 | Visualization / EDA | Matplotlib, Seaborn |
-| Modeling — Phase 1 & tabular | scikit-learn (LinearRegression, SVR, DecisionTreeRegressor, RandomForestRegressor, Ridge), XGBoost, LightGBM |
+| Modeling — Phase 1 & tabular | scikit-learn (LinearRegression, DecisionTreeRegressor, RandomForestRegressor, Ridge), XGBoost, LightGBM |
 | Modeling — time series | Prophet (with a statsmodels SARIMAX fallback) |
 | Modeling — deep learning | TensorFlow/Keras (LSTM) |
 | Model persistence | joblib, Keras `.keras` format |
