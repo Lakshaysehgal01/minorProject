@@ -1,7 +1,7 @@
 # Smart Energy Microgrid Trading — ML Pipeline
 
 
-A minor project that builds an end-to-end machine learning pipeline for a
+A Minor project that builds an end-to-end machine learning pipeline for a
 **smart energy microgrid**: synthetic household-level solar generation and
 consumption data, exploratory data analysis, a multi-model regression
 comparison (Phase 1 baselines through Prophet/LightGBM/LSTM/stacking
