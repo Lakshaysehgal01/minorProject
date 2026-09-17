@@ -36,5 +36,8 @@ Thumbs.db
 # Generated data
 ml-service/data/synthetic_energy_data.csv
 
+#catboost info
+ml-service/catboost_info/
+
 
 

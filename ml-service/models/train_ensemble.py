@@ -1,14 +1,16 @@
-"""Stacking ensemble: XGBoost (+LightGBM if it beats XGBoost) + LSTM, blended
-by a Ridge meta-learner, for both solar_generation_kwh and consumption_kwh.
+"""Stacking ensemble: XGBoost + LSTM (+ every candidate booster - currently
+LightGBM and CatBoost - that individually beats XGBoost), blended by a Ridge
+meta-learner, for both solar_generation_kwh and consumption_kwh.
 
 
 Run from the `ml-service/` directory: python models/train_ensemble.py
 
 
-Requires `models/train_lightgbm.py` to have already been run (its metrics
-JSON is read to decide whether LightGBM beats XGBoost and should be added as
-a base model) and `models/train_lstm.py` to have already been run (this
-script loads and reuses that pretrained LSTM rather than retraining one).
+Requires `models/train_lightgbm.py` and `models/train_catboost.py` to have
+already been run (their metrics JSON files are read to decide whether each
+one beats XGBoost and should be added as a base model) and
+`models/train_lstm.py` to have already been run (this script loads and
+reuses that pretrained LSTM rather than retraining one).
 
 
 NOTE: like train_lstm.py, this requires `tensorflow` and could only be
@@ -43,6 +45,7 @@ import sys
 
 import joblib
 import pandas as pd
+from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Ridge
 from xgboost import XGBRegressor
@@ -79,18 +82,35 @@ from train_lstm import LSTM_CONFIGS, add_cyclical_features, build_dataset  # noq
 FEATURES_BY_TARGET = {SOLAR_TARGET: SOLAR_FEATURES, CONSUMPTION_TARGET: CONSUMPTION_FEATURES}
 
 
+# Candidate tabular boosters considered as extra ensemble base models, beyond
+# the always-included XGBoost + LSTM. Each is included independently if it
+# beats XGBoost's Phase-1/Phase-2 R2 for that target - not capped at one, so
+# both could end up included, or neither. Adding a third booster later only
+# needs a new entry here, not new branching logic below.
+CANDIDATE_BOOSTERS = {
+    "lightgbm": {
+        "metric_slug": "lgbmregressor",
+        "build": lambda: LGBMRegressor(n_estimators=200, random_state=RANDOM_STATE, verbosity=-1),
+    },
+    "catboost": {
+        "metric_slug": "catboostregressor",
+        "build": lambda: CatBoostRegressor(n_estimators=200, random_state=RANDOM_STATE, verbose=False),
+    },
+}
 
 
-def lgbm_beats_xgb(target):
+
+
+def booster_beats_xgb(metric_slug, target):
     xgb_path = os.path.join(METRICS_DIR, f"{target}__xgbregressor.json")
-    lgbm_path = os.path.join(METRICS_DIR, f"{target}__lgbmregressor.json")
-    if not (os.path.exists(xgb_path) and os.path.exists(lgbm_path)):
+    candidate_path = os.path.join(METRICS_DIR, f"{target}__{metric_slug}.json")
+    if not (os.path.exists(xgb_path) and os.path.exists(candidate_path)):
         return False
     with open(xgb_path) as f:
         xgb_r2 = json.load(f)["r2"]
-    with open(lgbm_path) as f:
-        lgbm_r2 = json.load(f)["r2"]
-    return lgbm_r2 > xgb_r2
+    with open(candidate_path) as f:
+        candidate_r2 = json.load(f)["r2"]
+    return candidate_r2 > xgb_r2
 
 
 
@@ -174,16 +194,19 @@ def run_for_target(target, df):
     joblib.dump(xgb_model, f"{MODELS_DIR}/ensemble_xgboost_{slug}_model.pkl")
 
 
-    # --- Base model 2 (conditional): LightGBM, only if it beat XGBoost in the
-    # Step 2 comparison (models/train_lightgbm.py must have already run). ---
-    include_lgbm = lgbm_beats_xgb(target)
-    print(f"[{target}] LightGBM included as base model: {include_lgbm}")
-    if include_lgbm:
-        lgbm_model = LGBMRegressor(n_estimators=200, random_state=RANDOM_STATE, verbosity=-1)
-        lgbm_model.fit(train_df[features], train_df[target])
-        base_val_preds["lightgbm"] = predict_tabular_df(lgbm_model, val_df, features)
-        base_test_preds["lightgbm"] = predict_tabular_df(lgbm_model, test_df, features)
-        joblib.dump(lgbm_model, f"{MODELS_DIR}/ensemble_lightgbm_{slug}_model.pkl")
+    # --- Base models 2+ (conditional): each candidate booster (LightGBM,
+    # CatBoost, ...), included independently if it beat XGBoost in its own
+    # Phase 2 comparison (models/train_lightgbm.py / train_catboost.py must
+    # have already run). ---
+    for name, spec in CANDIDATE_BOOSTERS.items():
+        included = booster_beats_xgb(spec["metric_slug"], target)
+        print(f"[{target}] {name} included as base model: {included}")
+        if included:
+            booster_model = spec["build"]()
+            booster_model.fit(train_df[features], train_df[target])
+            base_val_preds[name] = predict_tabular_df(booster_model, val_df, features)
+            base_test_preds[name] = predict_tabular_df(booster_model, test_df, features)
+            joblib.dump(booster_model, f"{MODELS_DIR}/ensemble_{name}_{slug}_model.pkl")
 
 
     # --- Base model 3: pretrained pooled LSTM (loaded, not retrained here).
@@ -257,6 +280,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

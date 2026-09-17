@@ -1,12 +1,24 @@
-# How to train the models 
+# How to train the models on this machine (step-by-step, no coding knowledge needed)
+
+
+This guide walks you through every single step to train all the models for
+this project on a new/different computer. Just follow the steps in order,
+copy-pasting the commands exactly as written. You do not need to understand
+what the commands do — just type/paste them and press Enter.
+
+
+Everything in **`code blocks like this`** is a command you type into a
+terminal window. Everything else is an explanation.
+
 
 ---
+
 
 ## Before you start
 
 
 You need:
-1. This whole project folder ( containing the `ml-service`
+1. This whole project folder (`project234`, containing the `ml-service`
    folder) copied onto the new computer.
 2. **Python** installed on the new computer (version 3.11, 3.12, or 3.13).
    - To check if Python is already installed, open a terminal (see next
@@ -36,7 +48,7 @@ white window where you type commands instead of clicking things.
 
 **On Windows:**
 1. Open File Explorer and navigate to the `ml-service` folder inside the
-   project folder (`project\ml-service`).
+   project folder (`project234\ml-service`).
 2. Click once on the empty white space inside the folder (not on any file).
 3. Type `cmd` and press Enter — a dark terminal window will open, already
    pointed at this folder. (Alternative: right-click inside the folder and
@@ -244,7 +256,27 @@ RMSE=... MSE=... MAE=... R2=...
 ---
 
 
-## Step 7: Train the Prophet model
+## Step 7: Train the CatBoost model
+
+
+```
+python models\train_catboost.py
+```
+
+
+Just like Step 6, this is fast (no special setup needed). Expected output:
+```
+=== CatBoost for solar generation (solar_generation_kwh) ===
+RMSE=... MSE=... MAE=... R2=...
+=== CatBoost for consumption (consumption_kwh) ===
+RMSE=... MSE=... MAE=... R2=...
+```
+
+
+---
+
+
+## Step 8: Train the Prophet model
 
 
 ```
@@ -279,11 +311,11 @@ Either way is a successful run — move to the next step.
 ---
 
 
-## Optional but recommended: use your GPU to make Step 8 much faster
+## Optional but recommended: use your GPU to make Step 9 much faster
 
 
-**Skip this box and go straight to Step 8 if you don't have an NVIDIA
-graphics card, or don't want to bother with extra setup** — Step 8 will
+**Skip this box and go straight to Step 9 if you don't have an NVIDIA
+graphics card, or don't want to bother with extra setup** — Step 9 will
 still work fine without it, just slower (could take a few hours on CPU
 instead of ~10-20 minutes on a GPU).
 
@@ -355,7 +387,7 @@ Type (adjust only if your project is in a different location than shown
 in Step 0 above — the parts after `/mnt/c/` mirror your normal Windows
 folder path):
 ```
-cd "/ml-service"
+cd "/mnt/c/Users/Singh3 Shruti/OneDrive - The Boston Consulting Group, Inc/Desktop/project234/ml-service"
 ```
 To check you're in the right place:
 ```
@@ -393,17 +425,17 @@ ready to be used for training.
 **From now on, whenever you come back to do more training later, you only
 need to reopen the Ubuntu window and run:**
 ```
-cd "/ml-service"
+cd "/mnt/c/Users/Singh3 Shruti/OneDrive - The Boston Consulting Group, Inc/Desktop/project234/ml-service"
 source venv_gpu/bin/activate
 ```
-**...before running Step 8 below** — you don't need to repeat Steps A-E
+**...before running Step 9 below** — you don't need to repeat Steps A-E
 again.
 
 
 ---
 
 
-## Step 8: Train the LSTM model
+## Step 9: Train the LSTM model
 
 
 **This is the slowest and most demanding step in the whole guide** (unless
@@ -456,11 +488,11 @@ this one** — nothing further needs to run inside Ubuntu.
 ---
 
 
-## Step 9: Train the combined "ensemble" model
+## Step 10: Train the combined "ensemble" model
 
 
-This combines several of the previous models together. It needs Steps 6
-and 8 to have already finished successfully.
+This combines several of the previous models together. It needs Steps 6,
+7, and 9 to have already finished successfully.
 
 
 ```
@@ -470,7 +502,8 @@ python models\train_ensemble.py
 
 Expected output includes lines like:
 ```
-[solar_generation_kwh] LightGBM included as base model: True/False
+[solar_generation_kwh] lightgbm included as base model: True/False
+[solar_generation_kwh] catboost included as base model: True/False
 Ensemble (solar_generation_kwh) base models=[...]: RMSE=... MAE=... R2=...
 Ensemble (consumption_kwh) base models=[...]: RMSE=... MAE=... R2=...
 ```
@@ -479,7 +512,7 @@ Ensemble (consumption_kwh) base models=[...]: RMSE=... MAE=... R2=...
 ---
 
 
-## Step 10: Create the final results tables and charts
+## Step 11: Create the final results tables and charts
 
 
 This gathers every model's results from all the previous steps into two
@@ -509,7 +542,7 @@ Saved comparison CSVs and R2 bar charts to results/
 ---
 
 
-## Step 11 (optional): Start the prediction service and try it out
+## Step 12 (optional): Start the prediction service and try it out
 
 
 This starts a small web service that lets you ask the trained models for
@@ -559,6 +592,7 @@ python data\generate_data.py
 python notebooks\eda.py
 python train.py
 python models\train_lightgbm.py
+python models\train_catboost.py
 python models\train_prophet.py
 python models\train_lstm.py
 python models\train_ensemble.py
@@ -567,14 +601,15 @@ python results\model_comparison.py
 
 
 **If you DID set up the optional GPU section**, run everything except
-Step 8 in your normal Windows terminal, then switch to the Ubuntu window
-for Step 8 only, then switch back to Windows for the rest:
+Step 9 in your normal Windows terminal, then switch to the Ubuntu window
+for Step 9 only, then switch back to Windows for the rest:
 ```
 :: In your normal Windows terminal:
 python data\generate_data.py
 python notebooks\eda.py
 python train.py
 python models\train_lightgbm.py
+python models\train_catboost.py
 python models\train_prophet.py
 ```
 ```
@@ -630,12 +665,12 @@ https://visualstudio.microsoft.com/visual-cpp-build-tools/ (choose the
 the `pip install -r requirements.txt` command.
 
 
-**Prophet step (Step 7) seems stuck for several minutes the first time**
+**Prophet step (Step 8) seems stuck for several minutes the first time**
 This is usually normal — the first run needs to download and set up a
 small statistics tool in the background. Give it up to 5 minutes. If it's
 still stuck after that and you're on a restricted office/company network,
 it may be blocked by a firewall — that's fine, the script will
-automatically fall back to a backup method (see Step 7's explanation above)
+automatically fall back to a backup method (see Step 8's explanation above)
 the next time you run it; you can just let it continue or restart the step.
 
 
@@ -665,12 +700,12 @@ you installed with the `[and-cuda]` part included:
 and (3) you're running this check from inside the `venv_gpu` environment
 (you should see `(venv_gpu)` at the start of the terminal line). If all of
 that checks out and it's still empty, the GPU setup didn't fully work —
-it's safe to skip it and just run Step 8 on the normal Windows terminal
+it's safe to skip it and just run Step 9 on the normal Windows terminal
 instead (slower, but will still work correctly).
 
 
 **"Address already in use" / "only one usage of each socket address"
-when starting the service in Step 11**
+when starting the service in Step 12**
 Something is already using that address. Either close whatever terminal
 window is already running `uvicorn`, or start it on a different port
 instead:
@@ -681,7 +716,7 @@ and then visit `http://127.0.0.1:8001/docs` instead.
 
 
 **Any step seems frozen**
-Some steps (especially Step 5 and Step 8) are genuinely slow and can look
+Some steps (especially Step 5 and Step 9) are genuinely slow and can look
 "frozen" for several minutes while actually working — check the terminal
 window's title bar or task manager to see if the `python.exe` process is
 still using CPU. If it's using CPU, it's still working — just wait longer.

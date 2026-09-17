@@ -27,7 +27,7 @@ from xgboost import XGBRegressor
 
 
 DATA_PATH = "data/synthetic_energy_data.csv"
-MODELS_DIR = "models"
+MODELS_DIR = "models/trained_models"
 METRICS_DIR = "models/metrics"
 TEST_FRACTION = 0.2
 VAL_FRACTION = 0.10

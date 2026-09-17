@@ -60,6 +60,13 @@ MODELS_DIR = "models"
 SLUGS = {SOLAR_TARGET: "solar", CONSUMPTION_TARGET: "consumption"}
 
 
+# Single-row-request tabular models: each gets a standalone `{choice}_{slug}_model.pkl`
+# (for ?model={choice}) and an `ensemble_{choice}_{slug}_model.pkl` (the ensemble's
+# own copy, used only if that booster beat XGBoost during train_ensemble.py).
+# Adding a future booster only needs a new entry here, not new code below.
+TABULAR_MODEL_CHOICES = ("xgboost", "lightgbm", "catboost")
+
+
 models = {}
 
 
@@ -91,8 +98,9 @@ def try_load_keras(path):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     for slug in ("solar", "consumption"):
-        models[f"xgboost_{slug}"] = try_load(f"{MODELS_DIR}/xgboost_{slug}_model.pkl")
-        models[f"lightgbm_{slug}"] = try_load(f"{MODELS_DIR}/lightgbm_{slug}_model.pkl")
+        for choice in TABULAR_MODEL_CHOICES:
+            models[f"{choice}_{slug}"] = try_load(f"{MODELS_DIR}/{choice}_{slug}_model.pkl")
+            models[f"ensemble_{choice}_{slug}"] = try_load(f"{MODELS_DIR}/ensemble_{choice}_{slug}_model.pkl")
 
 
         models[f"lstm_{slug}"] = try_load_keras(f"{MODELS_DIR}/lstm_{slug}_model.keras")
@@ -102,8 +110,6 @@ async def lifespan(app: FastAPI):
 
         models[f"ridge_{slug}_meta"] = try_load(f"{MODELS_DIR}/ridge_{slug}_meta.pkl")
         models[f"ensemble_{slug}_config"] = try_load_json(f"{MODELS_DIR}/ensemble_{slug}_config.json")
-        models[f"ensemble_xgboost_{slug}"] = try_load(f"{MODELS_DIR}/ensemble_xgboost_{slug}_model.pkl")
-        models[f"ensemble_lightgbm_{slug}"] = try_load(f"{MODELS_DIR}/ensemble_lightgbm_{slug}_model.pkl")
 
 
     if not TENSORFLOW_AVAILABLE:
@@ -117,7 +123,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Smart Energy Microgrid Prediction API", lifespan=lifespan)
 
 
-ModelChoice = Literal["xgboost", "lightgbm", "lstm", "ensemble", "prophet"]
+ModelChoice = Literal["xgboost", "lightgbm", "catboost", "lstm", "ensemble", "prophet"]
 
 
 
@@ -246,10 +252,10 @@ def _predict_ensemble(rows, target, lstm_pred):
 
 
     preds = {"lstm": lstm_pred}
-    if "xgboost" in base_model_order:
-        preds["xgboost"] = float(models[f"ensemble_xgboost_{slug}"].predict(last_row_df)[0])
-    if "lightgbm" in base_model_order:
-        preds["lightgbm"] = float(models[f"ensemble_lightgbm_{slug}"].predict(last_row_df)[0])
+    for name in base_model_order:
+        if name == "lstm":
+            continue
+        preds[name] = float(models[f"ensemble_{name}_{slug}"].predict(last_row_df)[0])
 
 
     ordered = [[preds[name] for name in base_model_order]]
@@ -280,7 +286,7 @@ def predict_solar(payload: dict, model: ModelChoice = Query("ensemble")):
         )
 
 
-    if model in ("xgboost", "lightgbm"):
+    if model in TABULAR_MODEL_CHOICES:
         prediction = _predict_tabular(model, SOLAR_TARGET, SolarRequest(**payload))
         return SolarPrediction(predicted_solar_generation_kwh=prediction)
 
@@ -311,7 +317,7 @@ def predict_consumption(payload: dict, model: ModelChoice = Query("ensemble")):
         )
 
 
-    if model in ("xgboost", "lightgbm"):
+    if model in TABULAR_MODEL_CHOICES:
         prediction = _predict_tabular(model, CONSUMPTION_TARGET, ConsumptionRequest(**payload))
         return ConsumptionPrediction(predicted_consumption_kwh=prediction)
 
