@@ -136,31 +136,43 @@ Every trainer writes metrics containing:
 
 Metrics are written to `ml-service/models/metrics/{target}__{model}.json` when the training scripts are run. The comparison script combines those JSON files into result CSVs and charts.
 
-### 3.1 Committed Phase 1 comparison output
+### 3.1 Completed comparison results
 
-The repository currently contains these historical Phase 1 comparison CSVs. They include SVR because they were generated before the SVR block was commented out in the current `train.py`.
+The completed run is recorded in `ml-service/results/solar_model_comparison.csv` and `ml-service/results/consumption_model_comparison.csv`. The tables below are sorted by R2, matching the generated files.
 
 #### Solar generation
 
-| Model                 |    RMSE |     MSE |     MAE |      R2 |
-| --------------------- | ------: | ------: | ------: | ------: |
-| RandomForestRegressor | 0.04476 | 0.00200 | 0.02691 | 0.99960 |
-| XGBRegressor          | 0.04887 | 0.00239 | 0.02959 | 0.99953 |
-| DecisionTreeRegressor | 0.05833 | 0.00340 | 0.03506 | 0.99932 |
-| SVR (historical)      | 0.06387 | 0.00408 | 0.05069 | 0.99919 |
-| LinearRegression      | 0.51867 | 0.26902 | 0.40119 | 0.94652 |
+| Model                 |     RMSE |      MSE |      MAE |       R2 |
+| --------------------- | -------: | -------: | -------: | -------: |
+| RandomForestRegressor | 0.034528 | 0.001192 | 0.016434 | 0.999722 |
+| LGBMRegressor         | 0.036000 | 0.001296 | 0.018527 | 0.999698 |
+| XGBRegressor          | 0.036074 | 0.001301 | 0.018595 | 0.999697 |
+| CatBoostRegressor     | 0.037422 | 0.001400 | 0.019920 | 0.999674 |
+| Ensemble              | 0.037910 | 0.001437 | 0.019695 | 0.999664 |
+| DecisionTreeRegressor | 0.049917 | 0.002492 | 0.024379 | 0.999420 |
+| LSTM                  | 0.287726 | 0.082786 | 0.148929 | 0.980654 |
+| LinearRegression      | 0.694924 | 0.482919 | 0.568968 | 0.887537 |
+| Prophet_hh4_small     | 0.349578 | 0.122205 | 0.250147 | 0.746522 |
+| Prophet_hh0_medium    | 1.168509 | 1.365413 | 0.875916 | 0.743935 |
+| Prophet_hh3_large     | 1.342783 | 1.803065 | 1.047016 | 0.597353 |
 
 #### Consumption
 
-| Model                 |    RMSE |     MSE |     MAE |      R2 |
-| --------------------- | ------: | ------: | ------: | ------: |
-| RandomForestRegressor | 0.15969 | 0.02550 | 0.12755 | 0.93620 |
-| XGBRegressor          | 0.16456 | 0.02708 | 0.13204 | 0.93225 |
-| DecisionTreeRegressor | 0.21793 | 0.04749 | 0.17319 | 0.88118 |
-| SVR (historical)      | 0.26479 | 0.07012 | 0.20825 | 0.82458 |
-| LinearRegression      | 0.53038 | 0.28130 | 0.43310 | 0.29622 |
+| Model                 |     RMSE |      MSE |      MAE |       R2 |
+| --------------------- | -------: | -------: | -------: | -------: |
+| Ensemble              | 0.150276 | 0.022583 | 0.119984 | 0.959029 |
+| LGBMRegressor         | 0.150235 | 0.022571 | 0.120000 | 0.959016 |
+| CatBoostRegressor     | 0.150461 | 0.022638 | 0.120149 | 0.958893 |
+| RandomForestRegressor | 0.151514 | 0.022957 | 0.120964 | 0.958316 |
+| XGBRegressor          | 0.152566 | 0.023277 | 0.121808 | 0.957734 |
+| LSTM                  | 0.162116 | 0.026281 | 0.129245 | 0.952319 |
+| DecisionTreeRegressor | 0.215402 | 0.046398 | 0.172189 | 0.915750 |
+| Prophet_hh3_large     | 0.329263 | 0.108414 | 0.265647 | 0.868200 |
+| Prophet_hh0_medium    | 0.384639 | 0.147947 | 0.326196 | 0.607153 |
+| Prophet_hh4_small     | 0.314493 | 0.098906 | 0.252112 | 0.490725 |
+| LinearRegression      | 0.540311 | 0.291936 | 0.427950 | 0.469901 |
 
-These values are not claimed for LightGBM, CatBoost, LSTM, Prophet, or the ensemble because their metric JSON/CSV outputs are not present in the current workspace snapshot.
+**Result interpretation:** Random Forest is the best solar model by R2. The consumption ensemble is the best consumption model by R2, but only narrowly beats standalone LightGBM. The ensemble is not automatically the best model for every target.
 
 ## 4. Model-by-Model Data Flow
 
@@ -216,7 +228,7 @@ The trained estimator is retained in memory for comparison. If it is the best Ph
 
 **Output:** one scalar solar or consumption prediction per row. The best Phase 1 model is saved as `best_solar_model.pkl` or `best_consumption_model.pkl` when it wins the R2 comparison.
 
-The currently committed Phase 1 CSVs show Random Forest as the best stored baseline for both targets, but those CSVs are historical comparison artifacts rather than a new training run.
+The completed comparison shows Random Forest as the best solar model. For consumption, the completed ensemble has the highest R2.
 
 ### 4.4 XGBoost
 
@@ -285,6 +297,17 @@ Standalone models are saved as `catboost_solar_model.pkl` and `catboost_consumpt
 **Ensemble flow:** CatBoost is also conditional and is independently compared with XGBoost. It is included when its R2 is greater than XGBoost's R2. If included, it produces a separate `pred_catboost` column for Ridge. It does not consume the XGBoost or LightGBM output.
 
 Both candidate boosters can be included, or only one, or neither. The exact order is stored in `ensemble_{slug}_config.json`.
+
+### Actual completed ensemble membership
+
+The trained configuration files show the exact base-model handoff used in the reported results:
+
+| Target           | `base_model_order`                        |
+| ---------------- | ----------------------------------------- |
+| Solar generation | `xgboost -> lightgbm -> lstm`             |
+| Consumption      | `xgboost -> lightgbm -> catboost -> lstm` |
+
+Therefore CatBoost was selected for the consumption stack but not the solar stack. LightGBM was selected for both. The corresponding ensemble model files, Ridge meta-learners, and configuration JSON files are present under `ml-service/models/trained_models/`.
 
 ## 4.9 Model input/output summary
 
@@ -659,4 +682,4 @@ sequenceDiagram
 | `results/model_comparison.py` | full comparison CSVs and R2 bar charts                                                  |
 | `api/main.py`                 | JSON response containing one predicted kWh value                                        |
 
-The result files present in the repository currently include the older Phase 1 comparison rows for SVR. In the current `train.py`, the SVR definition is commented out, so a fresh Phase 1 run trains four active baseline models: Linear Regression, Decision Tree, Random Forest, and XGBoost. The documentation above follows the current executable code.
+The completed run contains trained artifacts for the active Phase 1 models, LightGBM, CatBoost, LSTM, both target-specific ensembles, their Ridge meta-learners, and the comparison CSVs/charts. SVR remains only in the older `ml-service/models/*_comparison.csv` files and is not part of the current executable `train.py` model list because its definition is commented out.

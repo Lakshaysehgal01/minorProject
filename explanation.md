@@ -404,11 +404,12 @@ Dropout helps reduce overfitting. The final Dense layer outputs one continuous p
 
 The ensemble is implemented in `ml-service/models/train_ensemble.py`.
 
-It combines:
+It combines XGBoost and LSTM in both target-specific stacks. LightGBM and CatBoost are added independently when their earlier R2 beats XGBoost.
 
-- XGBoost
-- LSTM
-- LightGBM, only if it beats XGBoost in the earlier comparison
+In the completed run, the actual base-model orders are:
+
+- Solar: `XGBoost -> LightGBM -> LSTM`
+- Consumption: `XGBoost -> LightGBM -> CatBoost -> LSTM`
 
 The final combination is performed by a Ridge Regression meta-learner.
 
@@ -436,7 +437,8 @@ $$
 =
 w_1(\text{XGBoost})
 +w_2(\text{LightGBM})
-+w_3(\text{LSTM})
++w_3(\text{CatBoost})
++w_4(\text{LSTM})
 +b
 $$
 
@@ -499,29 +501,41 @@ Interpretation:
 
 For example, `R² = 0.936` means the model explains approximately 93.6% of the variation in the target on that test set.
 
-## 16. Existing Baseline Results
+## 16. Completed Comparison Results
 
-The stored comparison files contain older Phase 1 results.
+The complete trained run is recorded in `ml-service/results/solar_model_comparison.csv` and `ml-service/results/consumption_model_comparison.csv`. Values below are RMSE, MAE, and R2; lower RMSE/MAE is better and higher R2 is better.
 
 ### Solar generation
 
-| Model             |   RMSE |    MAE |     R² |
-| ----------------- | -----: | -----: | -----: |
-| Random Forest     | 0.0448 | 0.0269 | 0.9996 |
-| XGBoost           | 0.0489 | 0.0296 | 0.9995 |
-| Decision Tree     | 0.0583 | 0.0351 | 0.9993 |
-| SVR               | 0.0639 | 0.0507 | 0.9992 |
-| Linear Regression | 0.5187 | 0.4012 | 0.9465 |
+| Model                     |   RMSE |    MAE |       R2 |
+| ------------------------- | -----: | -----: | -------: |
+| Random Forest             | 0.0345 | 0.0164 | 0.999722 |
+| LightGBM                  | 0.0360 | 0.0185 | 0.999698 |
+| XGBoost                   | 0.0361 | 0.0186 | 0.999697 |
+| CatBoost                  | 0.0374 | 0.0199 | 0.999674 |
+| Ensemble                  | 0.0379 | 0.0197 | 0.999664 |
+| Decision Tree             | 0.0499 | 0.0244 | 0.999420 |
+| LSTM                      | 0.2877 | 0.1489 | 0.980654 |
+| Linear Regression         | 0.6949 | 0.5690 | 0.887537 |
+| Prophet, small household  | 0.3496 | 0.2501 | 0.746522 |
+| Prophet, medium household | 1.1685 | 0.8759 | 0.743935 |
+| Prophet, large household  | 1.3428 | 1.0470 | 0.597353 |
 
 ### Consumption
 
-| Model             |   RMSE |    MAE |     R² |
-| ----------------- | -----: | -----: | -----: |
-| Random Forest     | 0.1597 | 0.1275 | 0.9362 |
-| XGBoost           | 0.1646 | 0.1320 | 0.9322 |
-| Decision Tree     | 0.2179 | 0.1732 | 0.8812 |
-| SVR               | 0.2648 | 0.2083 | 0.8246 |
-| Linear Regression | 0.5304 | 0.4331 | 0.2962 |
+| Model                     |   RMSE |    MAE |       R2 |
+| ------------------------- | -----: | -----: | -------: |
+| Ensemble                  | 0.1503 | 0.1200 | 0.959029 |
+| LightGBM                  | 0.1502 | 0.1200 | 0.959016 |
+| CatBoost                  | 0.1505 | 0.1201 | 0.958893 |
+| Random Forest             | 0.1515 | 0.1210 | 0.958316 |
+| XGBoost                   | 0.1526 | 0.1218 | 0.957734 |
+| LSTM                      | 0.1621 | 0.1292 | 0.952319 |
+| Decision Tree             | 0.2154 | 0.1722 | 0.915750 |
+| Prophet, large household  | 0.3293 | 0.2656 | 0.868200 |
+| Prophet, medium household | 0.3846 | 0.3262 | 0.607153 |
+| Prophet, small household  | 0.3145 | 0.2521 | 0.490725 |
+| Linear Regression         | 0.5403 | 0.4279 | 0.469901 |
 
 The files are:
 
@@ -536,39 +550,20 @@ Solar generation is almost directly determined by solar irradiance and panel cap
 
 Consumption contains human behavior, morning and evening habits, household differences, weekend behavior, and random noise. Therefore, it is more difficult to predict.
 
-## 17. Important Current Repository State
+## 17. Current Trained Repository State
 
-There is a difference between the current source code and the stored files.
+The complete run has now been generated from the current 13-column, 219,000-row dataset. The repository contains:
 
-The current generator is designed to produce:
+- Metric JSON files for every active model, both targets, and the ensemble.
+- Standalone XGBoost, LightGBM, and CatBoost artifacts.
+- Solar and consumption LSTM models plus their target and feature scalers.
+- Ensemble XGBoost, LightGBM, and CatBoost artifacts where selected.
+- Solar and consumption Ridge meta-learners and `ensemble_*_config.json` files.
+- Final comparison CSVs and R2 charts under `ml-service/results/`.
 
-- 219,000 rows.
-- 13 columns.
+The older `ml-service/models/solar_generation_kwh_comparison.csv` and `consumption_kwh_comparison.csv` files still contain SVR rows from an earlier run. SVR is commented out in the current `train.py`, so it is not part of the newly generated comparison results.
 
-However, the currently stored CSV contains:
-
-- 14,400 rows.
-- 9 columns.
-
-The stored CSV is missing newer fields such as:
-
-- `day_of_year`
-- `month`
-- `consumption_profile`
-- `consumption_profile_encoded`
-
-Also, the current `train.py` has SVR commented out, but the stored comparison CSV contains SVR results.
-
-Currently:
-
-- No metric JSON files exist.
-- No trained LSTM artifacts exist.
-- No trained LightGBM artifact exists.
-- No ensemble artifacts exist.
-- No final combined results CSV exists.
-- The existing best solar and consumption artifacts are both Random Forest models.
-
-For a fully consistent fresh run, regenerate the data and retrain everything in this order:
+The completed training order was:
 
 ```bash
 cd ml-service
@@ -583,7 +578,7 @@ cd ml-service
 ./venv/bin/python results/model_comparison.py
 ```
 
-The LSTM and ensemble steps require TensorFlow and may take considerably longer.
+The LSTM and ensemble steps require TensorFlow. The final comparison script reads the metric JSON files and does not retrain models.
 
 ## 18. FastAPI Prediction Service
 
