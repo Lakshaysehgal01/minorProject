@@ -1,15 +1,15 @@
 # Smart Energy Microgrid Trading — ML Pipeline
 
 
-A minor project that builds an end-to-end machine learning pipeline for a
-**smart energy microgrid**: real household-level solar generation and
-consumption data (Ausgrid Solar Home Electricity Dataset, 2010–2011),
-exploratory data analysis, a multi-model regression comparison (Phase 1
-baselines through Prophet/SARIMAX/LightGBM/LSTM/stacking ensemble), and a
-FastAPI service that serves live predictions from any of them. The predicted
-solar generation and consumption values are the core inputs a microgrid
-trading/scheduling layer would use to decide when a household is a net
-energy producer (can sell/export) or a net consumer (must buy/import).
+A Minor project that builds an end-to-end machine learning pipeline for a
+**smart energy microgrid**: synthetic household-level solar generation and
+consumption data, exploratory data analysis, a multi-model regression
+comparison (Phase 1 baselines through Prophet/LightGBM/LSTM/stacking
+ensemble), and a FastAPI service that serves live predictions from any of
+them. The predicted solar generation and consumption values are the core
+inputs a microgrid trading/scheduling layer would use to decide when a
+household is a net energy producer (can sell/export) or a net consumer (must
+buy/import).
 
 
 ---
@@ -45,8 +45,8 @@ ensemble), and exposes them behind a REST prediction API.
 - Perform exploratory data analysis (EDA) to validate and visualize the
   patterns in the data, including seasonal and household-level signals.
 - Train and fairly compare a progression of models per target — Phase 1
-  baselines (Linear/Tree/RandomForest/XGBoost), then LightGBM, Prophet,
-  SARIMAX, a pooled LSTM, and a stacking ensemble — using a time-respecting
+  baselines (Linear/Tree/RandomForest/XGBoost), then Prophet, LightGBM,
+  a pooled LSTM, and a stacking ensemble — using a time-respecting
   train/test (and train/validation/test) split throughout.
 - Persist every model as a reusable artifact and combine every result into
   one honest, per-target comparison table and chart.
@@ -485,8 +485,8 @@ Interactive Swagger docs auto-generated at `http://127.0.0.1:8000/docs`.
 |---|---|
 | Data preprocessing | Python, NumPy, pandas, requests (Open-Meteo API) |
 | Visualization / EDA | Matplotlib, Seaborn |
-| Modeling — Phase 1 & tabular | scikit-learn (LinearRegression, DecisionTreeRegressor, RandomForestRegressor, RidgeCV), XGBoost, LightGBM |
-| Modeling — time series | Prophet (with statsmodels SARIMAX fallback), statsmodels SARIMAX |
+| Modeling — Phase 1 & tabular | scikit-learn (LinearRegression, DecisionTreeRegressor, RandomForestRegressor, Ridge), XGBoost, LightGBM |
+| Modeling — time series | Prophet (with a statsmodels SARIMAX fallback) |
 | Modeling — deep learning | TensorFlow/Keras (LSTM) |
 | Model persistence | joblib, Keras `.keras` format |
 | API service | FastAPI, Pydantic, Uvicorn |
