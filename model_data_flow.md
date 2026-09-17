@@ -35,27 +35,73 @@ The two regression targets are trained independently:
 
 A solar model never predicts consumption, and a consumption model never predicts solar generation.
 
+### 1.1 System flow diagram
+
+```mermaid
+flowchart LR
+    A[generate_data.py] --> B[(synthetic_energy_data.csv)]
+    B --> C{Target}
+    C -->|solar_generation_kwh| S[Solar feature pipeline]
+    C -->|consumption_kwh| D[Consumption feature pipeline]
+    S --> E[Tabular models]
+    D --> E
+    E --> E1[Linear Regression]
+    E --> E2[Decision Tree]
+    E --> E3[Random Forest]
+    E --> E4[XGBoost]
+    E --> E5[LightGBM]
+    E --> E6[CatBoost]
+    S --> L[LSTM sequences]
+    D --> L
+    S --> P[Prophet or SARIMAX benchmark]
+    D --> P
+    E1 --> M[(metrics JSON)]
+    E2 --> M
+    E3 --> M
+    E4 --> M
+    E5 --> M
+    E6 --> M
+    L --> M
+    P --> M
+    E4 --> X[Stacking ensemble]
+    E5 --> X
+    E6 --> X
+    L --> X
+    X --> R[Ridge meta-learner]
+    R --> M
+    M --> Q[model_comparison.py]
+    Q --> O[comparison CSVs and R2 charts]
+    E4 --> API[FastAPI]
+    E5 --> API
+    E6 --> API
+    L --> API
+    R --> API
+    API --> Z[JSON kWh prediction]
+```
+
+The arrows into the stacking ensemble represent independent prediction streams. They do not mean that one booster receives another booster\'s prediction as a feature.
+
 ## 2. Source Dataset
 
 `ml-service/data/generate_data.py` generates 219,000 rows: 25 households x 365 days x 24 hours. Each row represents one household at one timestamp.
 
 ### Available columns
 
-| Column | Role |
-|---|---|
-| `timestamp` | Time-series ordering and row identity; not passed to tabular regressors |
-| `hour` | Hour of day, 0-23 |
-| `day_of_week` | Weekday, 0-6 |
-| `day_of_year` | Annual seasonality index, 1-365 |
-| `month` | Calendar month |
-| `household_id` | Household identity |
-| `consumption_profile` | Small, medium, or large tier; categorical source field |
-| `consumption_profile_encoded` | Encoded tier: 0, 1, or 2 |
-| `temperature` | Ambient temperature |
-| `solar_irradiance` | Normalized irradiance, 0-1 |
-| `panel_capacity_kw` | Household solar-panel capacity |
-| `solar_generation_kwh` | Solar target and LSTM historical lag value |
-| `consumption_kwh` | Consumption target and LSTM historical lag value |
+| Column                        | Role                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `timestamp`                   | Time-series ordering and row identity; not passed to tabular regressors |
+| `hour`                        | Hour of day, 0-23                                                       |
+| `day_of_week`                 | Weekday, 0-6                                                            |
+| `day_of_year`                 | Annual seasonality index, 1-365                                         |
+| `month`                       | Calendar month                                                          |
+| `household_id`                | Household identity                                                      |
+| `consumption_profile`         | Small, medium, or large tier; categorical source field                  |
+| `consumption_profile_encoded` | Encoded tier: 0, 1, or 2                                                |
+| `temperature`                 | Ambient temperature                                                     |
+| `solar_irradiance`            | Normalized irradiance, 0-1                                              |
+| `panel_capacity_kw`           | Household solar-panel capacity                                          |
+| `solar_generation_kwh`        | Solar target and LSTM historical lag value                              |
+| `consumption_kwh`             | Consumption target and LSTM historical lag value                        |
 
 The generated target values come from the synthetic formulas in `generate_data.py`, not from model predictions. Solar generation is driven mainly by irradiance and panel capacity. Consumption is driven by household baseline, morning/evening peaks, weekend behavior, and household tier.
 
@@ -89,6 +135,32 @@ Every trainer writes metrics containing:
 - R2
 
 Metrics are written to `ml-service/models/metrics/{target}__{model}.json` when the training scripts are run. The comparison script combines those JSON files into result CSVs and charts.
+
+### 3.1 Committed Phase 1 comparison output
+
+The repository currently contains these historical Phase 1 comparison CSVs. They include SVR because they were generated before the SVR block was commented out in the current `train.py`.
+
+#### Solar generation
+
+| Model                 |    RMSE |     MSE |     MAE |      R2 |
+| --------------------- | ------: | ------: | ------: | ------: |
+| RandomForestRegressor | 0.04476 | 0.00200 | 0.02691 | 0.99960 |
+| XGBRegressor          | 0.04887 | 0.00239 | 0.02959 | 0.99953 |
+| DecisionTreeRegressor | 0.05833 | 0.00340 | 0.03506 | 0.99932 |
+| SVR (historical)      | 0.06387 | 0.00408 | 0.05069 | 0.99919 |
+| LinearRegression      | 0.51867 | 0.26902 | 0.40119 | 0.94652 |
+
+#### Consumption
+
+| Model                 |    RMSE |     MSE |     MAE |      R2 |
+| --------------------- | ------: | ------: | ------: | ------: |
+| RandomForestRegressor | 0.15969 | 0.02550 | 0.12755 | 0.93620 |
+| XGBRegressor          | 0.16456 | 0.02708 | 0.13204 | 0.93225 |
+| DecisionTreeRegressor | 0.21793 | 0.04749 | 0.17319 | 0.88118 |
+| SVR (historical)      | 0.26479 | 0.07012 | 0.20825 | 0.82458 |
+| LinearRegression      | 0.53038 | 0.28130 | 0.43310 | 0.29622 |
+
+These values are not claimed for LightGBM, CatBoost, LSTM, Prophet, or the ensemble because their metric JSON/CSV outputs are not present in the current workspace snapshot.
 
 ## 4. Model-by-Model Data Flow
 
@@ -214,6 +286,20 @@ Standalone models are saved as `catboost_solar_model.pkl` and `catboost_consumpt
 
 Both candidate boosters can be included, or only one, or neither. The exact order is stored in `ensemble_{slug}_config.json`.
 
+## 4.9 Model input/output summary
+
+| Model             | Input shape                                 | Main transformation                                 | Output                                        |
+| ----------------- | ------------------------------------------- | --------------------------------------------------- | --------------------------------------------- |
+| Linear Regression | One solar or consumption row                | Linear weighted combination                         | One kWh scalar                                |
+| Decision Tree     | One target-specific row                     | Recursive feature splits                            | One kWh scalar                                |
+| Random Forest     | One target-specific row                     | Average of 200 trees                                | One kWh scalar                                |
+| XGBoost           | One target-specific row                     | Sequential boosted trees                            | One kWh scalar, or `pred_xgboost` in stack    |
+| LightGBM          | One target-specific row                     | Leaf-wise boosted trees                             | One kWh scalar, or optional `pred_lightgbm`   |
+| CatBoost          | One target-specific row                     | Boosted trees                                       | One kWh scalar, or optional `pred_catboost`   |
+| Prophet/SARIMAX   | One household timestamp series              | Seasonal time-series forecast                       | One forecast per future timestamp             |
+| LSTM              | 24 rows x target-specific sequence channels | Cyclical encoding, MinMax scaling, recurrent layers | One inverse-scaled kWh scalar, or `pred_lstm` |
+| Ridge ensemble    | One row of base predictions                 | Learned linear blend with Ridge                     | Final kWh scalar                              |
+
 ### 4.7 Prophet, with SARIMAX fallback
 
 **Implementation:** `ml-service/models/train_prophet.py`
@@ -312,6 +398,47 @@ The ensemble is a stacking model. It is important to describe it correctly:
 
 > XGBoost, LightGBM, and CatBoost do not run one after another with the previous model's prediction as their feature. They all receive the original input features independently. Their predictions, together with the LSTM prediction, are passed side by side to a Ridge meta-learner.
 
+### 5.0 Ensemble diagram
+
+```mermaid
+flowchart TB
+    A[(Raw CSV)] --> B[70/10/20 day split]
+    B --> T[70% train]
+    B --> V[10% validation]
+    B --> E[20% test]
+    T --> X1[XGBoost fit]
+    V --> X1
+    E --> X1
+    X1 --> XV[pred_xgboost validation]
+    X1 --> XT[pred_xgboost test]
+    T --> G{Candidate R2 > XGBoost R2?}
+    G -->|yes| L1[LightGBM and/or CatBoost fit]
+    V --> L1
+    E --> L1
+    L1 --> LV[optional booster validation predictions]
+    L1 --> LT[optional booster test predictions]
+    T --> N[Rebuild LSTM sequence features]
+    V --> N
+    E --> N
+    N --> LSTM[Load pretrained LSTM]
+    LSTM --> NV[pred_lstm validation]
+    LSTM --> NT[pred_lstm test]
+    XV --> VA[Inner join on household_id + timestamp]
+    LV --> VA
+    NV --> VA
+    V --> VA
+    VA --> R[Ridge.fit on validation predictions + actual]
+    XT --> TE[Aligned test prediction table]
+    LT --> TE
+    NT --> TE
+    E --> TE
+    TE --> R2[Ridge.predict]
+    R2 --> OUT[Final target prediction]
+    OUT --> MET[RMSE / MSE / MAE / R2]
+```
+
+The conditional branch can add LightGBM, CatBoost, both, or neither. XGBoost and LSTM are always present in the ensemble when TensorFlow and the required artifacts are available.
+
 ### 5.1 Ensemble training sequence
 
 The following happens independently for solar and consumption:
@@ -386,9 +513,9 @@ The ensemble inner-joins all base prediction tables on `(household_id, timestamp
 
 The resulting validation table has this conceptual shape:
 
-| household_id | timestamp | pred_xgboost | pred_lightgbm? | pred_catboost? | pred_lstm | actual |
-|---|---|---:|---:|---:|---:|---:|
-| household key | time key | prediction | optional | optional | prediction | true target |
+| household_id  | timestamp | pred_xgboost | pred_lightgbm? | pred_catboost? |  pred_lstm |      actual |
+| ------------- | --------- | -----------: | -------------: | -------------: | ---------: | ----------: |
+| household key | time key  |   prediction |       optional |       optional | prediction | true target |
 
 The test table has the same prediction columns and actual target, but it is never used to fit the Ridge learner.
 
@@ -425,6 +552,24 @@ ensemble_consumption_config.json
 ```
 
 The configuration file records the exact base-model order expected by Ridge. This is necessary because Ridge treats column positions as meaningful.
+
+### 5.8 Concrete example of the Ridge handoff
+
+If the configuration contains:
+
+```json
+{ "base_model_order": ["xgboost", "lightgbm", "lstm"] }
+```
+
+then the handoff is:
+
+```text
+original features -> XGBoost  -> 0.81 ┐
+original features -> LightGBM  -> 0.79 ├-> [0.81, 0.79, 0.76] -> Ridge -> 0.80 kWh
+24-hour sequence  -> LSTM      -> 0.76 ┘
+```
+
+The numeric values above are illustrative only. The important fact is the column order: Ridge receives the three predictions in exactly the order recorded in `base_model_order`, and the actual target is used only while fitting/evaluating the meta-learner.
 
 ## 6. Live API Data Flow
 
@@ -480,18 +625,38 @@ last request row's target-specific tabular features
 
 So at serving time, the tabular models still do not consume one another's outputs. The only model that feeds directly into the Ridge input from a sequence is the LSTM, and all base predictions are combined side by side.
 
+### 6.1 API sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant LSTM
+    participant Boosters as Ensemble tabular models
+    participant Ridge
+    Client->>API: POST /predict/{solar|consumption}?model=ensemble
+    API->>API: Validate exactly 24 sequence rows
+    API->>LSTM: Scale rows and predict target
+    LSTM-->>API: pred_lstm
+    API->>Boosters: Send last row's target-specific features
+    Boosters-->>API: pred_xgboost + optional booster predictions
+    API->>Ridge: Send predictions in base_model_order
+    Ridge-->>API: Final kWh prediction
+    API-->>Client: JSON response with predicted target
+```
+
 ## 7. Generated Outputs and Artifacts
 
-| Producer | Generated output |
-|---|---|
-| `generate_data.py` | `data/synthetic_energy_data.csv` |
-| Phase 1 `train.py` | comparison CSVs, metrics JSON files, best-model artifacts, standalone XGBoost artifacts |
-| `train_lightgbm.py` | LightGBM metrics and standalone LightGBM artifacts |
-| `train_catboost.py` | CatBoost metrics and standalone CatBoost artifacts |
-| `train_prophet.py` | Prophet/SARIMAX per-household metrics only |
-| `train_lstm.py` | LSTM models, scalers, and LSTM metrics |
-| `train_ensemble.py` | ensemble base models, Ridge meta-learners, config JSON, ensemble metrics |
-| `results/model_comparison.py` | full comparison CSVs and R2 bar charts |
-| `api/main.py` | JSON response containing one predicted kWh value |
+| Producer                      | Generated output                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| `generate_data.py`            | `data/synthetic_energy_data.csv`                                                        |
+| Phase 1 `train.py`            | comparison CSVs, metrics JSON files, best-model artifacts, standalone XGBoost artifacts |
+| `train_lightgbm.py`           | LightGBM metrics and standalone LightGBM artifacts                                      |
+| `train_catboost.py`           | CatBoost metrics and standalone CatBoost artifacts                                      |
+| `train_prophet.py`            | Prophet/SARIMAX per-household metrics only                                              |
+| `train_lstm.py`               | LSTM models, scalers, and LSTM metrics                                                  |
+| `train_ensemble.py`           | ensemble base models, Ridge meta-learners, config JSON, ensemble metrics                |
+| `results/model_comparison.py` | full comparison CSVs and R2 bar charts                                                  |
+| `api/main.py`                 | JSON response containing one predicted kWh value                                        |
 
 The result files present in the repository currently include the older Phase 1 comparison rows for SVR. In the current `train.py`, the SVR definition is commented out, so a fresh Phase 1 run trains four active baseline models: Linear Regression, Decision Tree, Random Forest, and XGBoost. The documentation above follows the current executable code.
