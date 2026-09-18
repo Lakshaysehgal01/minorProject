@@ -26,12 +26,13 @@ Synthetic data generation
 
 The data-generation code is in `ml-service/data/generate_data.py`.
 
-The intended dataset contains:
+The current generated dataset contains:
 
 - 25 households
 - 365 days
 - 24 hours per day
 - 219,000 rows
+- 17 columns
 
 Calculation:
 
@@ -43,45 +44,51 @@ Each row represents one household at one hour.
 
 ### Important columns
 
-| Column                        | Meaning                           |
-| ----------------------------- | --------------------------------- |
-| `timestamp`                   | Date and hour                     |
-| `hour`                        | Hour of day, from 0 to 23         |
-| `day_of_week`                 | Monday = 0 and Sunday = 6         |
-| `day_of_year`                 | Day number from 1 to 365          |
-| `month`                       | Month number                      |
-| `household_id`                | Household identifier              |
-| `consumption_profile`         | Small, medium, or large household |
-| `consumption_profile_encoded` | Small = 0, medium = 1, large = 2  |
-| `temperature`                 | Temperature in Celsius            |
-| `solar_irradiance`            | Available sunlight from 0 to 1    |
-| `panel_capacity_kw`           | Solar panel capacity              |
-| `solar_generation_kwh`        | Target value 1                    |
-| `consumption_kwh`             | Target value 2                    |
+| Column                        | Meaning                                         |
+| ----------------------------- | ----------------------------------------------- |
+| `timestamp`                   | Date and hour                                   |
+| `hour`                        | Hour of day, from 0 to 23                       |
+| `day_of_week`                 | Monday = 0 and Sunday = 6                       |
+| `day_of_year`                 | Day number from 1 to 365                        |
+| `month`                       | Month number                                    |
+| `household_id`                | Household identifier                            |
+| `consumption_profile`         | Small, medium, or large household               |
+| `consumption_profile_encoded` | Small = 0, medium = 1, large = 2                |
+| `temperature`                 | Temperature in Celsius                          |
+| `is_holiday`                  | Indian public-holiday flag                      |
+| `cloud_cover`                 | Cloud cover percentage                          |
+| `humidity`                    | Relative humidity percentage                    |
+| `wind_speed`                  | Wind speed                                      |
+| `solar_irradiance`            | Reference pvlib irradiance; not a model feature |
+| `panel_capacity_kw`           | Solar panel capacity                            |
+| `solar_generation_kwh`        | Target value 1                                  |
+| `consumption_kwh`             | Target value 2                                  |
 
 ### Solar generation
 
-Solar generation is mainly determined by:
+Solar generation is produced from real 2024 Delhi weather and pvlib panel physics. The generator uses:
 
-- Hour of the day
-- Solar irradiance
-- Panel capacity
-- Season
-- Random noise
+- GHI, DNI, and DHI irradiance components.
+- Household-specific panel tilt and azimuth.
+- Ambient temperature and wind-driven cell temperature.
+- Soiling loss, annual degradation, and inverter clipping.
+- Inverter faults, measurement spikes, and full-day equipment outages.
 
-The basic relationship is:
+The simplified physical relationship is:
 
 $$
 \text{Solar Generation}
 =
-\text{Panel Capacity}
-\times
-\text{Solar Irradiance}
-+
-\text{Noise}
+	ext{Real Weather}
+\rightarrow
+	ext{pvlib Panel Physics}
+\rightarrow
+	ext{Inverter Output}
+\rightarrow
+	ext{Solar Generation}
 $$
 
-Solar generation is forced to zero during night hours. It normally increases in the morning, reaches its maximum near 1 PM, and decreases in the evening. Summer generation is higher than winter generation because the daylight period and sunlight intensity are larger.
+Solar generation is zero at night and may also be zero during an equipment fault or outage. It varies with real cloud cover and weather rather than a smooth seasonal curve. The model does not receive `solar_irradiance` directly; it must infer generation from weather proxies such as cloud cover, humidity, wind speed, temperature, and panel capacity.
 
 ### Energy consumption
 
@@ -92,11 +99,26 @@ Consumption is generated from:
 - Evening peak around 7 PM
 - Extra daytime usage on weekends
 - Household profile size
-- Random noise
+- Real temperature and humidity through a cooling-load term.
+- Indian public holidays.
+- Correlated daily occupancy noise.
+- Multi-hour blackouts and single-hour appliance-surge outliers.
 
 Large households consume more than medium households, and medium households consume more than small households.
 
-The data therefore contains daily, weekly, and yearly seasonality, household-specific behavior, and random variation.
+The data therefore contains daily, weekly, yearly, weather-driven, household-specific, and fault-related variation.
+
+### Outliers and anomalies
+
+The outliers are intentionally retained as valid observations rather than removed or converted to missing values:
+
+- Solar inverter-fault readings: approximately 0.3% of daylight readings are set to zero.
+- Solar measurement spikes: approximately 0.2% of daylight readings are multiplied by 1.3 to 1.8.
+- Solar equipment outages: 1 to 3 full outage days are selected per household.
+- Consumption blackouts: 2 to 5 multi-hour zero-consumption blocks per household, biased toward hot hours.
+- Consumption appliance surges: rare single-hour increases of 1.0 to 2.5 kWh.
+
+In the current generated file, there are 108,734 solar-zero rows, 2,403 zero-consumption rows, a maximum solar value of 15.5493 kWh, and a maximum consumption value of 7.2413 kWh. Solar-zero rows include normal night hours as well as fault and outage events.
 
 ## 3. Why Synthetic Data Was Used
 
@@ -119,7 +141,7 @@ EDA is implemented in `ml-service/notebooks/eda.py`.
 
 It performs:
 
-1. Missing-value checking.
+1. Missing-value checking across all 17 columns.
 2. Statistical summaries using `describe()`.
 3. Average solar generation and consumption by hour.
 4. A correlation heatmap.
@@ -172,10 +194,11 @@ The project includes:
 3. Random Forest Regressor
 4. XGBoost
 5. LightGBM
-6. Prophet
-7. SARIMAX fallback
-8. LSTM
-9. Stacking Ensemble using Ridge Regression
+6. CatBoost
+7. Prophet
+8. SARIMAX fallback
+9. LSTM
+10. Stacking Ensemble using Ridge Regression
 
 The baseline models predict each target independently. One model predicts solar generation and another predicts consumption.
 
@@ -507,35 +530,35 @@ The complete trained run is recorded in `ml-service/results/solar_model_comparis
 
 ### Solar generation
 
-| Model                     |   RMSE |    MAE |       R2 |
-| ------------------------- | -----: | -----: | -------: |
-| Random Forest             | 0.0345 | 0.0164 | 0.999722 |
-| LightGBM                  | 0.0360 | 0.0185 | 0.999698 |
-| XGBoost                   | 0.0361 | 0.0186 | 0.999697 |
-| CatBoost                  | 0.0374 | 0.0199 | 0.999674 |
-| Ensemble                  | 0.0379 | 0.0197 | 0.999664 |
-| Decision Tree             | 0.0499 | 0.0244 | 0.999420 |
-| LSTM                      | 0.2877 | 0.1489 | 0.980654 |
-| Linear Regression         | 0.6949 | 0.5690 | 0.887537 |
-| Prophet, small household  | 0.3496 | 0.2501 | 0.746522 |
-| Prophet, medium household | 1.1685 | 0.8759 | 0.743935 |
-| Prophet, large household  | 1.3428 | 1.0470 | 0.597353 |
+| Model                     |   RMSE |    MAE |        R2 |
+| ------------------------- | -----: | -----: | --------: |
+| Ensemble                  | 0.3754 | 0.1742 |  0.971919 |
+| LSTM                      | 0.3814 | 0.1852 |  0.971023 |
+| LightGBM                  | 0.4608 | 0.2050 |  0.957771 |
+| XGBoost                   | 0.5199 | 0.2498 |  0.946249 |
+| CatBoost                  | 0.5321 | 0.2925 |  0.943702 |
+| Random Forest             | 0.5507 | 0.2472 |  0.939700 |
+| Decision Tree             | 0.8141 | 0.3048 |  0.868228 |
+| Linear Regression         | 2.8127 | 2.1011 | -0.573067 |
+| Prophet, small household  | 0.3496 | 0.2501 |  0.746522 |
+| Prophet, medium household | 1.1685 | 0.8759 |  0.743935 |
+| Prophet, large household  | 1.3428 | 1.0470 |  0.597353 |
 
 ### Consumption
 
 | Model                     |   RMSE |    MAE |       R2 |
 | ------------------------- | -----: | -----: | -------: |
-| Ensemble                  | 0.1503 | 0.1200 | 0.959029 |
-| LightGBM                  | 0.1502 | 0.1200 | 0.959016 |
-| CatBoost                  | 0.1505 | 0.1201 | 0.958893 |
-| Random Forest             | 0.1515 | 0.1210 | 0.958316 |
-| XGBoost                   | 0.1526 | 0.1218 | 0.957734 |
-| LSTM                      | 0.1621 | 0.1292 | 0.952319 |
-| Decision Tree             | 0.2154 | 0.1722 | 0.915750 |
+| Ensemble                  | 0.1913 | 0.1465 | 0.946078 |
+| LSTM                      | 0.1935 | 0.1479 | 0.944840 |
+| LightGBM                  | 0.2467 | 0.1918 | 0.910179 |
+| CatBoost                  | 0.2473 | 0.1924 | 0.909769 |
+| XGBoost                   | 0.2544 | 0.1978 | 0.904499 |
+| Random Forest             | 0.2561 | 0.1982 | 0.903231 |
+| Decision Tree             | 0.3563 | 0.2775 | 0.812716 |
 | Prophet, large household  | 0.3293 | 0.2656 | 0.868200 |
 | Prophet, medium household | 0.3846 | 0.3262 | 0.607153 |
 | Prophet, small household  | 0.3145 | 0.2521 | 0.490725 |
-| Linear Regression         | 0.5403 | 0.4279 | 0.469901 |
+| Linear Regression         | 0.6115 | 0.4933 | 0.448361 |
 
 The files are:
 
@@ -544,7 +567,7 @@ The files are:
 
 ### Why solar accuracy is higher
 
-Solar generation is almost directly determined by solar irradiance and panel capacity, and both are supplied as input features. This makes solar generation relatively easy to predict.
+Solar generation is still more predictable than consumption, but the current models no longer receive solar irradiance directly. They infer it from real-weather proxies, panel capacity, and time features. pvlib physics and weather continuity make the target structured, while faults and spikes reduce accuracy.
 
 ### Why consumption is harder
 
@@ -552,7 +575,7 @@ Consumption contains human behavior, morning and evening habits, household diffe
 
 ## 17. Current Trained Repository State
 
-The complete run has now been generated from the current 13-column, 219,000-row dataset. The repository contains:
+The complete outlier-aware run has now been generated from the current 17-column, 219,000-row dataset. The repository contains:
 
 - Metric JSON files for every active model, both targets, and the ensemble.
 - Standalone XGBoost, LightGBM, and CatBoost artifacts.
@@ -561,7 +584,7 @@ The complete run has now been generated from the current 13-column, 219,000-row 
 - Solar and consumption Ridge meta-learners and `ensemble_*_config.json` files.
 - Final comparison CSVs and R2 charts under `ml-service/results/`.
 
-The older `ml-service/models/solar_generation_kwh_comparison.csv` and `consumption_kwh_comparison.csv` files still contain SVR rows from an earlier run. SVR is commented out in the current `train.py`, so it is not part of the newly generated comparison results.
+The older `ml-service/models/solar_generation_kwh_comparison.csv` and `consumption_kwh_comparison.csv` files still contain SVR rows from an earlier run. SVR is commented out in the current `train.py`, so it is not part of the newly generated comparison results. The current results are in `ml-service/results/` and include the outlier-aware Ensemble and LSTM scores.
 
 The completed training order was:
 
@@ -605,7 +628,9 @@ day_of_year
 month
 household_id
 temperature
-solar_irradiance
+cloud_cover
+humidity
+wind_speed
 panel_capacity_kw
 ```
 
@@ -616,6 +641,8 @@ hour
 day_of_week
 household_id
 temperature
+humidity
+is_holiday
 consumption_profile_encoded
 ```
 
@@ -679,7 +706,7 @@ It means the model explains a large amount of variation in the target compared w
 
 ### What is the main limitation?
 
-The data is synthetic. Also, temperature and solar irradiance are assumed to be known inputs, while a real system would need weather forecasts for them.
+The target series are synthetic, even though they are driven by real Delhi weather. A deployed system would also need future weather forecasts, reliable fault labels, and validation against real household and solar-meter data.
 
 ### Is the trading system implemented?
 
@@ -687,4 +714,4 @@ No. The project produces forecasts that a future trading, matching, pricing, or 
 
 ## 20. Short Viva Answer
 
-> Our project forecasts hourly solar generation and household consumption for a smart microgrid. We generate synthetic data for 25 households with daily, weekly, and yearly patterns. We use a chronological train-test split to avoid future-data leakage. We compare Linear Regression, Decision Tree, Random Forest, XGBoost, LightGBM, Prophet, and LSTM models. Random Forest and boosting models are suitable for tabular features, Prophet provides a classical univariate time-series benchmark, and LSTM learns patterns from the previous 24 hours. Finally, a Ridge stacking ensemble combines predictions from XGBoost, LightGBM, and LSTM. We evaluate the models using RMSE, MSE, MAE, and R². The predictions are exposed through a FastAPI service for future use by a microgrid trading or scheduling system.
+> Our project forecasts hourly solar generation and household consumption for a smart microgrid. We generate 219,000 synthetic records for 25 households using real Delhi weather, pvlib solar physics, Indian holidays, and explicit fault, blackout, and appliance-surge outliers. We use chronological splits to avoid future-data leakage and compare Linear Regression, Decision Tree, Random Forest, XGBoost, LightGBM, CatBoost, Prophet, and LSTM models. The Ridge stacking ensemble is the best model for both targets in the outlier-aware run, with R² of 0.9719 for solar and 0.9461 for consumption. Predictions are exposed through FastAPI for future trading or scheduling use.

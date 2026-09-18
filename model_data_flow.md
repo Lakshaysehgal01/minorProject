@@ -1,11 +1,11 @@
 # Model Data Flow
 
-This document describes the model inputs, processing steps, outputs, saved artifacts, and ensemble data flow implemented in this repository. The source of truth is the Python code under `ml-service/`; older result files and README text may contain models from an earlier run.
+This document describes the model inputs, processing steps, outputs, saved artifacts, ensemble data flow, and outlier behavior implemented in the current repository. The source of truth is the Python code under `ml-service/` and the latest files under `ml-service/results/`.
 
 ## 1. Overall Pipeline
 
 ```text
-synthetic_energy_data.csv
+energy_data.csv
         |
         +--> time-based train/test split ------------------------------+
         |                                                               |
@@ -39,7 +39,7 @@ A solar model never predicts consumption, and a consumption model never predicts
 
 ```mermaid
 flowchart LR
-    A[generate_data.py] --> B[(synthetic_energy_data.csv)]
+    A[generate_data.py] --> B[(energy_data.csv)]
     B --> C{Target}
     C -->|solar_generation_kwh| S[Solar feature pipeline]
     C -->|consumption_kwh| D[Consumption feature pipeline]
@@ -81,9 +81,26 @@ flowchart LR
 
 The arrows into the stacking ensemble represent independent prediction streams. They do not mean that one booster receives another booster\'s prediction as a feature.
 
+### 1.2 Simple model diagram
+
+This is the quick visual summary. Each circle is an independent model. The models do not feed into one another until their predictions reach the ensemble.
+
+```mermaid
+graph LR
+    A((Data)) --> B((XGBoost))
+    A --> C((LightGBM))
+    A --> D((CatBoost))
+    A --> E((LSTM))
+    B --> F((Ensemble))
+    C --> F
+    D --> F
+    E --> F
+    F --> G((Prediction))
+```
+
 ## 2. Source Dataset
 
-`ml-service/data/generate_data.py` generates 219,000 rows: 25 households x 365 days x 24 hours. Each row represents one household at one timestamp.
+`ml-service/data/generate_data.py` generates 219,000 rows: 25 households x 365 days x 24 hours. Each row represents one household at one timestamp. The current dataset uses real 2024 Delhi weather as an input to the generator, pvlib solar physics, Indian holidays, and explicit anomaly events.
 
 ### Available columns
 
@@ -98,12 +115,40 @@ The arrows into the stacking ensemble represent independent prediction streams. 
 | `consumption_profile`         | Small, medium, or large tier; categorical source field                  |
 | `consumption_profile_encoded` | Encoded tier: 0, 1, or 2                                                |
 | `temperature`                 | Ambient temperature                                                     |
-| `solar_irradiance`            | Normalized irradiance, 0-1                                              |
+| `is_holiday`                  | Indian public-holiday flag                                              |
+| `cloud_cover`                 | Cloud cover percentage                                                  |
+| `humidity`                    | Relative humidity percentage                                            |
+| `wind_speed`                  | Wind speed                                                              |
+| `solar_irradiance`            | Reference pvlib irradiance for EDA; not a model feature                 |
 | `panel_capacity_kw`           | Household solar-panel capacity                                          |
 | `solar_generation_kwh`        | Solar target and LSTM historical lag value                              |
 | `consumption_kwh`             | Consumption target and LSTM historical lag value                        |
 
-The generated target values come from the synthetic formulas in `generate_data.py`, not from model predictions. Solar generation is driven mainly by irradiance and panel capacity. Consumption is driven by household baseline, morning/evening peaks, weekend behavior, and household tier.
+The generated target values come from the generator, not from model predictions. Solar generation is calculated from real Delhi GHI/DNI/DHI weather through pvlib panel physics, with panel orientation, cell temperature, soiling, degradation, inverter clipping, and anomalies. Consumption is driven by household baseline, morning/evening peaks, weekend and holiday behavior, real temperature/humidity cooling load, correlated daily noise, and anomalies.
+
+`solar_irradiance` is retained for EDA and debugging but is deliberately excluded from the model feature list. Giving it directly to the models would expose an almost direct answer for solar generation.
+
+### 2.1 Outliers and anomalies
+
+The anomalies are extreme valid values, not missing-data gaps. They are introduced in `generate_data.py` after the normal solar and consumption signals are created:
+
+| Target      | Outlier mechanism                                                      | Intended behavior                                                  |
+| ----------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Solar       | Daylight inverter-fault zeros, approximately 0.3% of daylight readings | Unexpected zero production                                         |
+| Solar       | Daylight measurement spikes, approximately 0.2% of daylight readings   | 1.3x to 1.8x generation spikes                                     |
+| Solar       | 1 to 3 randomly selected full-day equipment outages per household      | All generation is zero for the selected day                        |
+| Consumption | 2 to 5 multi-hour blackout blocks per household                        | Consumption becomes zero during the block, biased toward hot hours |
+| Consumption | Rare single-hour appliance surges                                      | Adds 1.0 to 2.5 kWh to a reading                                   |
+
+Measured in the current generated `data/energy_data.csv`:
+
+- Solar zeros: 108,734 rows, including normal nighttime zeros and outage/fault zeros.
+- Consumption zeros: 2,403 rows, primarily blackout events.
+- Solar maximum: 15.5493 kWh.
+- Consumption maximum: 7.2413 kWh.
+- Holiday-flagged rows: 10,800.
+
+Because the outliers are real values rather than `NaN`, the pipeline does not impute or delete them. They remain in training and test data so the metrics measure behavior under faults and unusual demand.
 
 ## 3. Splitting and Evaluation
 
@@ -134,7 +179,7 @@ Every trainer writes metrics containing:
 - MAE
 - R2
 
-Metrics are written to `ml-service/models/metrics/{target}__{model}.json` when the training scripts are run. The comparison script combines those JSON files into result CSVs and charts.
+Metrics are written to `ml-service/models/metrics/{target}__{model}.json` when the training scripts are run. The comparison script combines those JSON files into result CSVs and charts. Because the test block is the final 20% of time, the reported scores include the later-season weather and anomaly behavior in that held-out period.
 
 ### 3.1 Completed comparison results
 
@@ -142,37 +187,37 @@ The completed run is recorded in `ml-service/results/solar_model_comparison.csv`
 
 #### Solar generation
 
-| Model                 |     RMSE |      MSE |      MAE |       R2 |
-| --------------------- | -------: | -------: | -------: | -------: |
-| RandomForestRegressor | 0.034528 | 0.001192 | 0.016434 | 0.999722 |
-| LGBMRegressor         | 0.036000 | 0.001296 | 0.018527 | 0.999698 |
-| XGBRegressor          | 0.036074 | 0.001301 | 0.018595 | 0.999697 |
-| CatBoostRegressor     | 0.037422 | 0.001400 | 0.019920 | 0.999674 |
-| Ensemble              | 0.037910 | 0.001437 | 0.019695 | 0.999664 |
-| DecisionTreeRegressor | 0.049917 | 0.002492 | 0.024379 | 0.999420 |
-| LSTM                  | 0.287726 | 0.082786 | 0.148929 | 0.980654 |
-| LinearRegression      | 0.694924 | 0.482919 | 0.568968 | 0.887537 |
-| Prophet_hh4_small     | 0.349578 | 0.122205 | 0.250147 | 0.746522 |
-| Prophet_hh0_medium    | 1.168509 | 1.365413 | 0.875916 | 0.743935 |
-| Prophet_hh3_large     | 1.342783 | 1.803065 | 1.047016 | 0.597353 |
+| Model                 |     RMSE |      MSE |      MAE |        R2 |
+| --------------------- | -------: | -------: | -------: | --------: |
+| Ensemble              | 0.375413 | 0.140935 | 0.174165 |  0.971919 |
+| LSTM                  | 0.381357 | 0.145433 | 0.185230 |  0.971023 |
+| LGBMRegressor         | 0.460839 | 0.212373 | 0.205046 |  0.957771 |
+| XGBRegressor          | 0.519919 | 0.270316 | 0.249761 |  0.946249 |
+| CatBoostRegressor     | 0.532097 | 0.283127 | 0.292457 |  0.943702 |
+| RandomForestRegressor | 0.550685 | 0.303253 | 0.247191 |  0.939700 |
+| DecisionTreeRegressor | 0.814055 | 0.662686 | 0.304811 |  0.868228 |
+| LinearRegression      | 2.812652 | 7.911009 | 2.101141 | -0.573067 |
+| Prophet_hh4_small     | 0.349578 | 0.122205 | 0.250147 |  0.746522 |
+| Prophet_hh0_medium    | 1.168509 | 1.365413 | 0.875916 |  0.743935 |
+| Prophet_hh3_large     | 1.342783 | 1.803065 | 1.047016 |  0.597353 |
 
 #### Consumption
 
 | Model                 |     RMSE |      MSE |      MAE |       R2 |
 | --------------------- | -------: | -------: | -------: | -------: |
-| Ensemble              | 0.150276 | 0.022583 | 0.119984 | 0.959029 |
-| LGBMRegressor         | 0.150235 | 0.022571 | 0.120000 | 0.959016 |
-| CatBoostRegressor     | 0.150461 | 0.022638 | 0.120149 | 0.958893 |
-| RandomForestRegressor | 0.151514 | 0.022957 | 0.120964 | 0.958316 |
-| XGBRegressor          | 0.152566 | 0.023277 | 0.121808 | 0.957734 |
-| LSTM                  | 0.162116 | 0.026281 | 0.129245 | 0.952319 |
-| DecisionTreeRegressor | 0.215402 | 0.046398 | 0.172189 | 0.915750 |
+| Ensemble              | 0.191269 | 0.036584 | 0.146462 | 0.946078 |
+| LSTM                  | 0.193453 | 0.037424 | 0.147936 | 0.944840 |
+| LGBMRegressor         | 0.246748 | 0.060885 | 0.191816 | 0.910179 |
+| CatBoostRegressor     | 0.247311 | 0.061163 | 0.192400 | 0.909769 |
+| XGBRegressor          | 0.254430 | 0.064734 | 0.197759 | 0.904499 |
+| RandomForestRegressor | 0.256113 | 0.065594 | 0.198171 | 0.903231 |
+| DecisionTreeRegressor | 0.356298 | 0.126948 | 0.277533 | 0.812716 |
 | Prophet_hh3_large     | 0.329263 | 0.108414 | 0.265647 | 0.868200 |
 | Prophet_hh0_medium    | 0.384639 | 0.147947 | 0.326196 | 0.607153 |
 | Prophet_hh4_small     | 0.314493 | 0.098906 | 0.252112 | 0.490725 |
-| LinearRegression      | 0.540311 | 0.291936 | 0.427950 | 0.469901 |
+| LinearRegression      | 0.611492 | 0.373923 | 0.493264 | 0.448361 |
 
-**Result interpretation:** Random Forest is the best solar model by R2. The consumption ensemble is the best consumption model by R2, but only narrowly beats standalone LightGBM. The ensemble is not automatically the best model for every target.
+**Result interpretation:** The ensemble is the best model for both targets in the outlier-aware run. Solar is harder than before because the models no longer receive direct irradiance and must infer production from weather proxies. Linear Regression performs especially poorly for solar because it cannot capture pvlib non-linearity, clipping, faults, and spikes.
 
 ## 4. Model-by-Model Data Flow
 
@@ -186,14 +231,15 @@ For solar:
 
 ```text
 hour, day_of_week, day_of_year, month,
-household_id, temperature, solar_irradiance, panel_capacity_kw
+household_id, temperature, cloud_cover, humidity,
+wind_speed, panel_capacity_kw
 ```
 
 For consumption:
 
 ```text
-hour, day_of_week, household_id, temperature,
-consumption_profile_encoded
+hour, day_of_week, household_id, temperature, humidity,
+is_holiday, consumption_profile_encoded
 ```
 
 **Training:** fits a linear function from the selected features to the target.
@@ -228,7 +274,7 @@ The trained estimator is retained in memory for comparison. If it is the best Ph
 
 **Output:** one scalar solar or consumption prediction per row. The best Phase 1 model is saved as `best_solar_model.pkl` or `best_consumption_model.pkl` when it wins the R2 comparison.
 
-The completed comparison shows Random Forest as the best solar model. For consumption, the completed ensemble has the highest R2.
+The outlier-aware comparison shows the Ensemble as the best model for both solar and consumption.
 
 ### 4.4 XGBoost
 
@@ -371,7 +417,9 @@ hour_sin, hour_cos,
 dow_sin, dow_cos,
 doy_sin, doy_cos,
 temperature_scaled,
-solar_irradiance_scaled,
+cloud_cover_scaled,
+humidity_scaled,
+wind_speed_scaled,
 panel_capacity_kw_scaled,
 household_id_scaled,
 solar_generation_kwh_scaled
@@ -383,6 +431,8 @@ Consumption sequence feature channels:
 hour_sin, hour_cos,
 dow_sin, dow_cos,
 temperature_scaled,
+humidity_scaled,
+is_holiday_scaled,
 household_id_scaled,
 consumption_profile_encoded_scaled,
 consumption_kwh_scaled
@@ -469,7 +519,7 @@ The following happens independently for solar and consumption:
 #### Step 1: Load and split the raw dataset
 
 ```text
-synthetic_energy_data.csv
+energy_data.csv
     -> time_based_split_3way
     -> train_df (70%), val_df (10%), test_df (20%)
 ```
@@ -672,7 +722,7 @@ sequenceDiagram
 
 | Producer                      | Generated output                                                                        |
 | ----------------------------- | --------------------------------------------------------------------------------------- |
-| `generate_data.py`            | `data/synthetic_energy_data.csv`                                                        |
+| `generate_data.py`            | `data/energy_data.csv`                                                                  |
 | Phase 1 `train.py`            | comparison CSVs, metrics JSON files, best-model artifacts, standalone XGBoost artifacts |
 | `train_lightgbm.py`           | LightGBM metrics and standalone LightGBM artifacts                                      |
 | `train_catboost.py`           | CatBoost metrics and standalone CatBoost artifacts                                      |
@@ -682,4 +732,4 @@ sequenceDiagram
 | `results/model_comparison.py` | full comparison CSVs and R2 bar charts                                                  |
 | `api/main.py`                 | JSON response containing one predicted kWh value                                        |
 
-The completed run contains trained artifacts for the active Phase 1 models, LightGBM, CatBoost, LSTM, both target-specific ensembles, their Ridge meta-learners, and the comparison CSVs/charts. SVR remains only in the older `ml-service/models/*_comparison.csv` files and is not part of the current executable `train.py` model list because its definition is commented out.
+The complete outlier-aware run contains trained artifacts for the active Phase 1 models, LightGBM, CatBoost, LSTM, both target-specific ensembles, their Ridge meta-learners, and the comparison CSVs/charts. SVR remains only in older `ml-service/models/*_comparison.csv` files and is not part of the current executable `train.py` model list because its definition is commented out.
