@@ -11,11 +11,10 @@ ml-service/venv_gpu/
 
 
 # Trained model artifacts (regenerate with `python train.py` and the
-# models/train_*.py scripts) - the scripts themselves stay tracked.
-ml-service/models/*
-!ml-service/models/.gitkeep
-!ml-service/models/train_*.py
-!ml-service/models/metrics/
+# models/train_*.py scripts) - the scripts themselves stay tracked, since
+# they live directly under ml-service/models/ rather than in this subfolder.
+ml-service/models/trained_models/*
+!ml-service/models/trained_models/.gitkeep
 ml-service/models/metrics/*
 !ml-service/models/metrics/.gitkeep
 ml-service/notebooks/plots/
@@ -34,10 +33,13 @@ Thumbs.db
 
 
 # Generated data
-ml-service/data/synthetic_energy_data.csv
+ml-service/data/energy_data.csv
 
-#catboost info
+#catboost model artifacts
 ml-service/catboost_info/
+
+#weather cache folder
+ml-service/data/weather_cache/
 
 
 

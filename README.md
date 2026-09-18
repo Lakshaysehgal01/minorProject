@@ -92,7 +92,7 @@ ensemble), and exposes them behind a REST prediction API.
                  │  generate_data.py     │   Synthetic hourly data
                  │  (data/)              │   generator (25 households, 365 days)
                  └──────────┬────────────┘
-                            │  synthetic_energy_data.csv
+                            │  energy_data.csv
                             ▼
                  ┌───────────────────────┐
                  │  eda.py               │   Missing-value check, describe(),
@@ -137,8 +137,11 @@ ensemble), and exposes them behind a REST prediction API.
 ```
 ml-service/
   data/
-    generate_data.py            # synthetic data generator (Step 1)
-    synthetic_energy_data.csv   # generated dataset (219,000 rows)
+    fetch_weather.py            # downloads & caches real Delhi weather (Step 1)
+    generate_data.py            # synthetic data generator, pvlib solar physics (Step 1)
+    weather_cache/
+      delhi_weather_2024.csv    # cached real hourly Delhi weather (Open-Meteo)
+    energy_data.csv             # generated dataset (219,000 rows)
   notebooks/
     eda.py                      # EDA script (Step 2)
     plots/
@@ -148,19 +151,20 @@ ml-service/
       monthly_seasonal_profile.png     # NEW: monthly solar/consumption/temperature
       consumption_boxplot_by_profile.png # NEW: consumption by household tier
   models/
-    best_solar_model.pkl              # Phase 1 best model for solar_generation_kwh
-    best_consumption_model.pkl        # Phase 1 best model for consumption_kwh
-    xgboost_{solar,consumption}_model.pkl      # dedicated XGBoost artifacts (API)
-    lightgbm_{solar,consumption}_model.pkl     # dedicated LightGBM artifacts (API)
-    catboost_{solar,consumption}_model.pkl     # dedicated CatBoost artifacts (API)
-    lstm_{solar,consumption}_model.keras       # pooled LSTM models
-    lstm_{solar,consumption}_{target,features}_scaler.pkl  # LSTM MinMaxScalers
-    ensemble_xgboost_{solar,consumption}_model.pkl    # ensemble's own base models
-    ensemble_lightgbm_{solar,consumption}_model.pkl   # (only if LightGBM beat XGBoost)
-    ensemble_catboost_{solar,consumption}_model.pkl   # (only if CatBoost beat XGBoost)
-    ridge_{solar,consumption}_meta.pkl        # stacking ensemble meta-learners
-    ensemble_{solar,consumption}_config.json  # which base models the ensemble uses
-    {target}_comparison.csv           # Phase 1 full model comparison table
+    trained_models/
+      best_solar_model.pkl              # Phase 1 best model for solar_generation_kwh
+      best_consumption_model.pkl        # Phase 1 best model for consumption_kwh
+      xgboost_{solar,consumption}_model.pkl      # dedicated XGBoost artifacts (API)
+      lightgbm_{solar,consumption}_model.pkl     # dedicated LightGBM artifacts (API)
+      catboost_{solar,consumption}_model.pkl     # dedicated CatBoost artifacts (API)
+      lstm_{solar,consumption}_model.keras       # pooled LSTM models
+      lstm_{solar,consumption}_{target,features}_scaler.pkl  # LSTM MinMaxScalers
+      ensemble_xgboost_{solar,consumption}_model.pkl    # ensemble's own base models
+      ensemble_lightgbm_{solar,consumption}_model.pkl   # (only if LightGBM beat XGBoost)
+      ensemble_catboost_{solar,consumption}_model.pkl   # (only if CatBoost beat XGBoost)
+      ridge_{solar,consumption}_meta.pkl        # stacking ensemble meta-learners
+      ensemble_{solar,consumption}_config.json  # which base models the ensemble uses
+      {target}_comparison.csv           # Phase 1 full model comparison table
     metrics/                          # one JSON per (target, model) - feeds results/
     train_lightgbm.py                 # Step 2: LightGBM (Phase 2)
     train_catboost.py                 # Step 2b: CatBoost (Phase 2)
@@ -185,11 +189,50 @@ ml-service/
 ## 6. Dataset
 
 
-### 6.1 Generation method
+### 6.1 Why this dataset was reworked
+The first version of this generator used smooth, noise-free sinusoids for
+temperature/irradiance and fed `solar_irradiance` directly to the models as
+a feature. Since `solar_generation_kwh ≈ panel_capacity_kw × solar_irradiance`
+is almost an exact linear function of that feature, **every** model -
+Linear Regression through the full stacking ensemble - landed at
+R² ≈ 0.997-0.9997 for solar, with almost no separation between model
+families. That's not a modeling win, it's a data problem: there was no real
+unexplained variance left for any model to fail on. See §8bis's "Results"
+note and §12 for the full before/after.
+
+
+### 6.2 Generation method (current)
 `data/generate_data.py` produces **hourly** records for **25 households**
-over a **full year** (2026-01-01 to 2026-12-31, 365 days — 2026 is not a
-leap year), giving `25 × 24 × 365 = 219,000` rows, with a fixed random seed
-(`42`) for reproducibility.
+over a **full year** (2026-01-01 to 2026-12-31, 365 days), giving
+`25 × 24 × 365 = 219,000` rows, with a fixed random seed (`42`) for
+reproducibility. Two things now come from the real world instead of a
+formula:
+
+
+- **Real weather**: `data/fetch_weather.py` downloads one real calendar
+  year (2024) of hourly Delhi weather - temperature, humidity, cloud cover,
+  wind speed, and GHI/DNI/DHI solar irradiance components - from the free,
+  keyless [Open-Meteo Historical Weather API](https://open-meteo.com/) and
+  caches it to `data/weather_cache/delhi_weather_2024.csv`. `generate_data.py`
+  calls this automatically the first time it's needed and reuses the cache
+  afterward, so it only needs network access once. (On a network with a
+  TLS-inspecting corporate proxy, this fetch can fail with an SSL
+  certificate error - if so, run it once from an unrestricted network, or
+  on the training machine, and copy the resulting cache file over.)
+- **Real solar physics**: [pvlib](https://pvlib-python.readthedocs.io/)
+  converts that real irradiance into each household's actual panel output -
+  plane-of-array irradiance for a randomized tilt/azimuth, ambient- and
+  wind-driven cell temperature (`pvlib.temperature.faiman`), PVWatts DC
+  power with per-household dust/soiling loss and mild annual panel
+  degradation, and PVWatts inverter conversion (which clips output once DC
+  power exceeds the undersized inverter's rating) - instead of a hand-typed
+  formula.
+
+
+Indian public holidays (`holidays.India`) and several outlier/anomaly
+generators (inverter faults, equipment-outage days, blackout blocks biased
+toward the hottest hours, appliance-surge spikes) round out the realism -
+see §6.4.
 
 
 | Column | Type | Description |
@@ -197,59 +240,55 @@ leap year), giving `25 × 24 × 365 = 219,000` rows, with a fixed random seed
 | `timestamp` | datetime | Hour timestamp |
 | `hour` | int (0–23) | Hour of day |
 | `day_of_week` | int (0–6) | 0 = Monday … 6 = Sunday |
-| `day_of_year` | int (1–365) | Day of year, for annual seasonality |
+| `day_of_year` | int (1–365) | Day of year |
 | `month` | int (1–12) | Calendar month |
+| `is_holiday` | int (0–1) | Indian public holiday flag |
 | `household_id` | int (0–24) | Household identifier |
 | `consumption_profile` | string | Household usage tier: "small"/"medium"/"large" |
 | `consumption_profile_encoded` | int (0–2) | Ordinal encoding of the tier above |
-| `temperature` | float | Ambient temperature (°C) |
-| `solar_irradiance` | float (0–1) | Normalized solar irradiance |
+| `temperature` | float | Real Delhi ambient temperature (°C), + per-household sensor bias/noise |
+| `cloud_cover` | float (0–100) | Real cloud cover (%) |
+| `humidity` | float (0–100) | Real relative humidity (%) |
+| `wind_speed` | float | Real wind speed |
+| `solar_irradiance` | float | Plane-of-array irradiance, reference/EDA only - **not** a model feature (see §6.1) |
 | `panel_capacity_kw` | float | Fixed panel capacity per household (2–12 kW) |
-| `solar_generation_kwh` | float | Target 1 — hourly solar energy generated |
+| `solar_generation_kwh` | float | Target 1 — hourly solar energy generated (pvlib output) |
 | `consumption_kwh` | float | Target 2 — hourly household energy consumed |
 
 
-### 6.2 Signal design
-- **Seasonality driver**: a single `seasonal_factor = cos(2π(day_of_year -
-  172)/365)` (+1 at the Jun 21 summer solstice, -1 at the Dec 21 winter
-  solstice) underlies both temperature and solar irradiance, so both peak
-  and trough in the same season.
-- **Temperature**: daily sinusoid (cooler at night, peak mid-afternoon) + a
-  genuine ±10°C annual swing driven by `seasonal_factor` + Gaussian noise.
-- **Solar irradiance**: a Gaussian bell curve peaking at 1 PM whose
-  **daylight window** (sunrise 5–8 AM, sunset 4–9 PM) and **peak intensity**
-  (0.6–1.0) both vary seasonally — shorter, dimmer days in winter, longer,
-  brighter days in summer — clipped to `[0, 1]`.
-- **Solar generation** = `panel_capacity_kw × solar_irradiance` + small
-  Gaussian noise, clipped at 0 and forced to exactly 0 outside the daylight
-  window (so nights are always 0, not just near-0 noise).
-- **Consumption** = a per-household baseline load + a Gaussian bump centered
-  at 8 AM (morning peak) + a larger Gaussian bump centered at 7 PM (evening
-  peak) + an extra daytime bump on weekends, all **scaled by the
-  household's consumption-profile tier** (small ×0.7, medium ×1.0, large
-  ×1.5) + Gaussian noise, clipped at 0.
+### 6.3 Signal design
+- **Solar generation**: real GHI/DNI/DHI → pvlib plane-of-array irradiance
+  (per-household random tilt 25-31°, azimuth 170-190°) → PVWatts DC power
+  (with per-household soiling decay + reset "cleanings" every ~15-30 days,
+  and ~0.5%/year degradation) → PVWatts inverter conversion (DC:AC ≈ 1.11,
+  so sunny-day output visibly clips instead of scaling forever).
+- **Consumption** = the same per-household baseline + morning/evening
+  Gaussian peaks + weekend daytime bump as before, **plus** a
+  cooling-degree-hour AC term driven by real temperature/humidity (a rough
+  heat-index adjustment), an extra evening bump on real Indian holidays, and
+  an AR(1) (day-to-day correlated, not i.i.d.) daily "mood" noise term on
+  top of the existing hourly noise.
 - Households are split into 3 tiers (10 small / 10 medium / 5 large,
-  shuffled across `household_id` so id order isn't a proxy for tier), each
-  with its own baseline-load range (`small` 0.2–0.4 kW, `medium` 0.4–0.7 kW,
-  `large` 0.7–1.2 kW). Panel capacity is drawn independently per household
-  (2–12 kW), not correlated with tier. Every household attribute is fixed
-  once (not per-row), so it behaves consistently across the whole year
-  while differing from its neighbors.
+  shuffled across `household_id`), each with its own baseline-load range
+  (`small` 0.2–0.4 kW, `medium` 0.4–0.7 kW, `large` 0.7–1.2 kW). Panel
+  capacity, tilt, azimuth, soiling schedule, and temperature-sensor bias are
+  all drawn independently per household and fixed for the whole year.
 
 
-### 6.3 Summary statistics (generated dataset)
+### 6.4 Outliers & anomalies (extreme values, not missing data)
+By design, anomalies show up as real zero/spike readings rather than `NaN`
+gaps, so no imputation code is needed anywhere downstream:
+- **Solar**: rare (~0.3%) inverter-fault zeros and rare (~0.2%) measurement
+  spikes during daylight hours, plus 1-3 full-day equipment-outage days per
+  household per year.
+- **Consumption**: 2-5 multi-hour blackout blocks per household per year,
+  biased toward the hottest hours (realistic Delhi grid strain during heat
+  waves), plus rare single-hour appliance-surge spikes.
 
 
-| Feature | Mean | Min | Max | Std |
-|---|---|---|---|---|
-| temperature (°C) | 18.00 | -3.45 | 39.17 | 9.11 |
-| solar_irradiance | 0.24 | 0.00 | 1.00 | 0.30 |
-| panel_capacity_kw | 8.09 | 2.64 | 11.76 | 2.75 |
-| solar_generation_kwh | 1.90 | 0.00 | 11.85 | 2.63 |
-| consumption_kwh | 1.14 | 0.00 | 4.68 | 0.74 |
-
-
-No missing values in any of the 13 columns (validated in the EDA step).
+Summary statistics and EDA plots depend on the real weather cache, which
+this repo doesn't ship with (see §6.2) - run `python notebooks/eda.py`
+after generating the data to see the real distributions.
 
 
 ---
@@ -261,8 +300,9 @@ No missing values in any of the 13 columns (validated in the EDA step).
 `notebooks/eda.py` performs:
 
 
-1. **Missing value check** — confirms 0 nulls across all 13 columns.
-2. **`df.describe()`** — full numeric summary (table above).
+1. **Missing value check** — confirms 0 nulls across all 17 columns (the
+   dataset has no missing-data gaps by design - see §6.4).
+2. **`df.describe()`** — full numeric summary.
 3. **Hourly profile line plot** (`hourly_profile.png`) — average solar
    generation and consumption by hour of day.
 4. **Correlation heatmap** (`correlation_heatmap.png`) — numeric feature
@@ -304,8 +344,11 @@ five regression algorithms each:
 
 | Target | Features used |
 |---|---|
-| `solar_generation_kwh` | `hour`, `day_of_week`, `day_of_year`, `month`, `household_id`, `temperature`, `solar_irradiance`, `panel_capacity_kw` |
-| `consumption_kwh` | `hour`, `day_of_week`, `household_id`, `temperature`, `consumption_profile_encoded` |
+| `solar_generation_kwh` | `hour`, `day_of_week`, `day_of_year`, `month`, `household_id`, `temperature`, `cloud_cover`, `humidity`, `wind_speed`, `panel_capacity_kw` |
+| `consumption_kwh` | `hour`, `day_of_week`, `household_id`, `temperature`, `humidity`, `is_holiday`, `consumption_profile_encoded` |
+
+
+`solar_irradiance` is deliberately **not** a feature - see §6.1 for why.
 
 
 ### 8.2 Train/test split — time-based, not random
@@ -328,6 +371,17 @@ results without re-running anything.
 
 
 ### 8.4 Results
+
+
+> **These results predate the §6.1 data-realism rework and are now stale** -
+> they were measured on the old smooth-sinusoid dataset with `solar_irradiance`
+> as a feature, which is exactly the setup that produced unrealistic
+> R² ≈ 0.999 scores across the board. They're kept here as a historical
+> record of that finding; re-run `train.py` on the regenerated
+> `data/energy_data.csv` (real weather + pvlib physics) to get current
+> numbers, which should show a genuinely harder problem and real
+> separation between model families. See §12 for the recommended
+> hyperparameter-tuning follow-up once that re-run is done.
 
 
 Trained end-to-end on the full 219,000-row dataset (see `ml-service/STEPS.md`
@@ -366,15 +420,15 @@ which model wins.*
 
 
 `RandomForestRegressor` was selected as the best Phase 1 model for **both**
-targets, pickled to `models/best_solar_model.pkl` and
-`models/best_consumption_model.pkl`. As a sizing note: an earlier
+targets, pickled to `models/trained_models/best_solar_model.pkl` and
+`models/trained_models/best_consumption_model.pkl`. As a sizing note: an earlier
 *unregularized* RandomForest on the original 10-household dataset produced
 a 122 MB pickle; scaling to 219,000 rows and bumping `min_samples_leaf`
 from 3 to 25 kept both pickles in a similar, practical size range on this
 run.
 
 
-### 8.5 Interpretation
+### 8.5 Interpretation (historical - see the §8.4 callout)
 - **Solar generation** reached R²=0.99972 with RandomForest, and every
   tree/boosting model landed within a hair of it — confirms it's a
   near-deterministic function of `solar_irradiance` and `panel_capacity_kw`,
@@ -470,11 +524,14 @@ individual model for each target — reported either way.
 ### Results (full pipeline, all phases combined)
 
 
-*The tables and analysis below predate CatBoost being added and don't yet
-include it — re-run `train_catboost.py` and `results/model_comparison.py`
-on the training machine to get an updated combined table, and re-run
-`train_ensemble.py` afterward since CatBoost may now also qualify as an
-ensemble base model.*
+> **Stale, same as §8.4**: the tables and honesty-check analysis below were
+> measured on the old smooth-sinusoid, `solar_irradiance`-as-a-feature
+> dataset (see §6.1) - that's *why* every model here clusters so tightly
+> near R²=0.999 for solar. They also predate CatBoost. Re-run
+> `train_lightgbm.py`, `train_catboost.py`, `train_prophet.py`,
+> `train_lstm.py`, `train_ensemble.py`, and `results/model_comparison.py`
+> on the training machine against the regenerated `data/energy_data.csv` to
+> get a current, meaningful combined table.
 
 
 **Solar generation (`solar_generation_kwh`)**
@@ -572,7 +629,7 @@ choice return `503` — it doesn't stop the service from starting.
 
 
 All request bodies are validated with Pydantic (e.g. `hour` must be
-0–23, `day_of_week` must be 0–6, `solar_irradiance` must be 0–1);
+0–23, `day_of_week` must be 0–6, `cloud_cover`/`humidity` must be 0–100);
 invalid input returns a `422` with a field-level error message.
 
 
@@ -586,7 +643,9 @@ Request:
   "month": 6,
   "household_id": 3,
   "temperature": 28.5,
-  "solar_irradiance": 0.9,
+  "cloud_cover": 20.0,
+  "humidity": 45.0,
+  "wind_speed": 3.2,
   "panel_capacity_kw": 8.0
 }
 ```
@@ -604,6 +663,8 @@ Request:
   "day_of_week": 2,
   "household_id": 3,
   "temperature": 15.0,
+  "humidity": 55.0,
+  "is_holiday": 0,
   "consumption_profile_encoded": 2
 }
 ```
@@ -620,8 +681,8 @@ actual observed `solar_generation_kwh` for that past hour):
 {
   "rows": [
     { "hour": 0, "day_of_week": 2, "day_of_year": 180, "month": 6, "household_id": 3,
-      "temperature": 20.1, "solar_irradiance": 0.0, "panel_capacity_kw": 8.0,
-      "solar_generation_kwh": 0.0 },
+      "temperature": 20.1, "cloud_cover": 15.0, "humidity": 40.0, "wind_speed": 2.1,
+      "panel_capacity_kw": 8.0, "solar_generation_kwh": 0.0 },
     { "...": "23 more hourly rows" }
   ]
 }
@@ -651,6 +712,7 @@ once the server is running.
 | Layer | Tools |
 |---|---|
 | Data generation & manipulation | Python, NumPy, pandas |
+| Real-world data sourcing | Open-Meteo Historical Weather API (`requests`), pvlib (solar panel physics), `holidays` (Indian public holidays) |
 | Visualization / EDA | Matplotlib, Seaborn |
 | Modeling — Phase 1 & tabular | scikit-learn (LinearRegression, SVR, DecisionTreeRegressor, RandomForestRegressor, Ridge), XGBoost, LightGBM, CatBoost |
 | Modeling — time series | Prophet (with a statsmodels SARIMAX fallback) |
@@ -690,6 +752,9 @@ steps depend on earlier ones' output:
    ```bash
    python data/generate_data.py
    ```
+   The first run downloads and caches one real year of Delhi weather
+   (needs internet access once - see §6.2's corporate-proxy note if it
+   fails with an SSL error); every run after that reuses the cached file.
 2. **Run EDA**
    ```bash
    python notebooks/eda.py
@@ -719,7 +784,7 @@ steps depend on earlier ones' output:
    ```bash
    curl -X POST "http://127.0.0.1:8000/predict/solar?model=xgboost" \
      -H "Content-Type: application/json" \
-     -d '{"hour":13,"day_of_week":2,"day_of_year":180,"month":6,"household_id":3,"temperature":28.5,"solar_irradiance":0.9,"panel_capacity_kw":8.0}'
+     -d '{"hour":13,"day_of_week":2,"day_of_year":180,"month":6,"household_id":3,"temperature":28.5,"cloud_cover":20.0,"humidity":45.0,"wind_speed":3.2,"panel_capacity_kw":8.0}'
    ```
 
 
@@ -729,13 +794,27 @@ steps depend on earlier ones' output:
 ## 12. Limitations & Future Scope
 
 
-- **Synthetic data**: results demonstrate the pipeline and modeling
-  approach, not real-world accuracy; validating against real smart-meter
-  data would be the natural next step.
-- **No weather forecast input**: `temperature` and `solar_irradiance` are
-  treated as known inputs to the API, which in a real deployment would
-  themselves need to be forecasted (e.g. from a weather API) 1–24 hours
-  ahead.
+- **Synthetic data, real weather**: the target values (`solar_generation_kwh`,
+  `consumption_kwh`) are still simulated, but they're now driven by a real
+  year of Delhi weather + pvlib panel physics rather than a smooth formula
+  (§6.1) - closer to real-world accuracy, but validating against real
+  smart-meter data would still be the natural next step.
+- **No weather forecast input**: `temperature`/`cloud_cover`/`humidity`/
+  `wind_speed` are treated as known inputs to the API, which in a real
+  deployment would themselves need to be forecasted (e.g. from a weather
+  API) 1–24 hours ahead, and forecast values carry their own error that
+  this dataset doesn't currently simulate.
+- **Results tables need re-running**: §8.4's and §8bis's results tables
+  were measured before the §6.1 data-realism rework and are now stale -
+  see those sections' callouts. Re-run every `train_*.py` script and
+  `results/model_comparison.py` on the training machine against the
+  regenerated `data/energy_data.csv`.
+- **Recommended next step - hyperparameter tuning**: now that the problem
+  is genuinely harder, default hyperparameters (e.g. `n_estimators=200`
+  across the board) will likely stop being trivially near-perfect. A
+  tuning pass (`GridSearchCV`/Optuna over XGBoost/LightGBM/CatBoost) should
+  show real, meaningful differentiation between models for the first time -
+  not implemented here, but worth doing once the re-run above is complete.
 - **No trading/matching logic**: this project produces the forecasts a
   microgrid trading algorithm would consume; the actual peer-to-peer
   matching, pricing, and settlement logic is a separate future module.
@@ -773,10 +852,18 @@ served behind a REST API that lets a caller pick which model answers each
 request.
 
 
-**Best model per target, in practice**: `RandomForestRegressor`
-(R²=0.99972) for solar generation, and `LGBMRegressor` (R²=0.95902,
-narrowly ahead of RandomForest) for consumption. The stacking ensemble,
-while a reasonable methodology, did not surpass the best individual model
-on either target in this run — reported as-is rather than framed as a win,
-consistent with this project's "report the real numbers honestly"
-principle throughout.
+**Best model per target**: `RandomForestRegressor` (solar) and
+`LGBMRegressor` (consumption) won the most recent full run, with the
+stacking ensemble not surpassing the best individual model on either
+target - reported as-is rather than framed as a win, consistent with this
+project's "report the real numbers honestly" principle throughout. Those
+specific numbers (§8.4, §8bis) predate the real-weather/pvlib data-realism
+rework in §6.1 and need re-measuring; the rework exists precisely because
+the old numbers (R² ≈ 0.999 for solar, near-identical scores across very
+different model families) were an artifact of a too-easy, noise-free
+dataset rather than a genuine modeling result.
+
+
+
+
+
