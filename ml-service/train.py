@@ -26,7 +26,7 @@ from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
 
 
-DATA_PATH = "data/synthetic_energy_data.csv"
+DATA_PATH = "data/energy_data.csv"
 MODELS_DIR = "models/trained_models"
 METRICS_DIR = "models/metrics"
 TEST_FRACTION = 0.2
@@ -34,6 +34,11 @@ VAL_FRACTION = 0.10
 RANDOM_STATE = 42
 
 
+# solar_irradiance is deliberately NOT a feature: it (plus panel_capacity_kw)
+# is almost sufficient by itself to compute solar_generation_kwh, which made
+# every model trivially near-perfect (R2 ~ 0.999) on the old dataset. Models
+# now have to infer generation from real, imperfect weather proxies instead
+# of being handed the near-answer - see README.md's Dataset section.
 SOLAR_TARGET = "solar_generation_kwh"
 SOLAR_FEATURES = [
     "hour",
@@ -42,7 +47,9 @@ SOLAR_FEATURES = [
     "month",
     "household_id",
     "temperature",
-    "solar_irradiance",
+    "cloud_cover",
+    "humidity",
+    "wind_speed",
     "panel_capacity_kw",
 ]
 
@@ -53,6 +60,8 @@ CONSUMPTION_FEATURES = [
     "day_of_week",
     "household_id",
     "temperature",
+    "humidity",
+    "is_holiday",
     "consumption_profile_encoded",
 ]
 
@@ -215,6 +224,7 @@ def train_and_compare(df, target, features, label):
 
 
 def main():
+    os.makedirs(MODELS_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp"])
 
 
@@ -262,8 +272,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
 
 

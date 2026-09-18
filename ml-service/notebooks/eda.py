@@ -11,7 +11,7 @@ import pandas as pd
 import seaborn as sns
 
 
-DATA_PATH = "data/synthetic_energy_data.csv"
+DATA_PATH = "data/energy_data.csv"
 PLOTS_DIR = "notebooks/plots"
 
 

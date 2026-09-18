@@ -271,6 +271,7 @@ def run_for_target(target, df):
 
 
 def main():
+    os.makedirs(MODELS_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp"])
     run_for_target(SOLAR_TARGET, df)
     run_for_target(CONSUMPTION_TARGET, df)
@@ -280,8 +281,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
 
 

@@ -75,12 +75,14 @@ EPOCHS = 50
 LSTM_CONFIGS = {
     SOLAR_TARGET: {
         "cyclical_cols": ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "doy_sin", "doy_cos"],
-        "scale_cols": ["temperature", "solar_irradiance", "panel_capacity_kw", "household_id"],
+        # solar_irradiance is deliberately excluded here too - see train.py's
+        # SOLAR_FEATURES comment for why.
+        "scale_cols": ["temperature", "cloud_cover", "humidity", "wind_speed", "panel_capacity_kw", "household_id"],
         "slug": "solar",
     },
     CONSUMPTION_TARGET: {
         "cyclical_cols": ["hour_sin", "hour_cos", "dow_sin", "dow_cos"],
-        "scale_cols": ["temperature", "household_id", "consumption_profile_encoded"],
+        "scale_cols": ["temperature", "humidity", "is_holiday", "household_id", "consumption_profile_encoded"],
         "slug": "consumption",
     },
 }
@@ -229,6 +231,7 @@ def train_and_evaluate(labeled_df, target, epochs=EPOCHS):
 
 
 def main(epochs=EPOCHS):
+    os.makedirs(MODELS_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp"])
     train_df, val_df, test_df = time_based_split_3way(df)
     labeled_df = pd.concat(

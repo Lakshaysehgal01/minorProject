@@ -68,6 +68,7 @@ def train_and_evaluate(df, target, features, label):
 
 
 def main():
+    os.makedirs(MODELS_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp"])
     train_and_evaluate(df, SOLAR_TARGET, SOLAR_FEATURES, "solar generation")
     train_and_evaluate(df, CONSUMPTION_TARGET, CONSUMPTION_FEATURES, "consumption")

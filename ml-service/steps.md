@@ -142,7 +142,10 @@ Once this step finishes with no errors, you're ready to start training.
 ## Step 3: Generate the training data
 
 
-This creates the synthetic dataset the models learn from.
+This creates the dataset the models learn from. Solar generation and
+consumption are now simulated using a real year of Delhi weather (downloaded
+automatically, once) plus real solar-panel physics - not just a made-up
+formula - so the first run needs internet access.
 
 
 ```
@@ -150,12 +153,21 @@ python data\generate_data.py
 ```
 
 
-Expected output (takes a few seconds):
+Expected output (the first run takes a bit longer while it downloads
+weather data; after that, re-runs are instant since the download is cached):
 ```
 Generated 219000 rows for 25 households over 365 days.
-Saved to data/synthetic_energy_data.csv
+Saved to data/energy_data.csv
 ```
 If you see this, it worked. Move to the next step.
+
+
+**If this fails with an error mentioning "SSL" or "certificate verify
+failed"**: this usually means you're on a work/corporate network that
+inspects internet traffic in a way that blocks this download. Try running
+this same command from a home network instead, then copy the file it
+creates at `data\weather_cache\delhi_weather_2024.csv` onto this machine
+before re-running the command here.
 
 
 ---
@@ -222,8 +234,8 @@ one** — if it's sitting on `[2/5] Training SVR...` for a long time with no
 After all 10 models are done, you'll see two result tables print out
 (one per target), followed by these two final lines:
 ```
-Saved best solar model (...) to models/best_solar_model.pkl
-Saved best consumption model (...) to models/best_consumption_model.pkl
+Saved best solar model (...) to models/trained_models/best_solar_model.pkl
+Saved best consumption model (...) to models/trained_models/best_consumption_model.pkl
 ```
 
 
@@ -720,8 +732,6 @@ Some steps (especially Step 5 and Step 9) are genuinely slow and can look
 "frozen" for several minutes while actually working — check the terminal
 window's title bar or task manager to see if the `python.exe` process is
 still using CPU. If it's using CPU, it's still working — just wait longer.
-
-
 
 
 

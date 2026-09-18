@@ -26,6 +26,15 @@ prophet==1.4.0
 statsmodels==0.14.4
 
 
+# Realistic data generation (data/fetch_weather.py, data/generate_data.py):
+# requests fetches real Delhi weather from the free Open-Meteo archive API,
+# pvlib turns that weather into physically realistic per-household solar
+# panel output, and holidays (also a prophet dependency, pinned here
+# explicitly since generate_data.py doesn't depend on prophet) flags Indian
+# public holidays for the consumption model.
+requests==2.34.2
+pvlib==0.15.2
+holidays==0.103
 
 
 

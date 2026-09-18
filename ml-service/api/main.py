@@ -56,7 +56,7 @@ except ImportError:
     TENSORFLOW_AVAILABLE = False
 
 
-MODELS_DIR = "models"
+MODELS_DIR = "models/trained_models"
 SLUGS = {SOLAR_TARGET: "solar", CONSUMPTION_TARGET: "consumption"}
 
 
@@ -135,7 +135,9 @@ class SolarRequest(BaseModel):
     month: int = Field(..., ge=1, le=12)
     household_id: int = Field(..., ge=0)
     temperature: float
-    solar_irradiance: float = Field(..., ge=0, le=1)
+    cloud_cover: float = Field(..., ge=0, le=100)
+    humidity: float = Field(..., ge=0, le=100)
+    wind_speed: float = Field(..., ge=0)
     panel_capacity_kw: float = Field(..., gt=0)
 
 
@@ -146,6 +148,8 @@ class ConsumptionRequest(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6)
     household_id: int = Field(..., ge=0)
     temperature: float
+    humidity: float = Field(..., ge=0, le=100)
+    is_holiday: int = Field(..., ge=0, le=1)
     consumption_profile_encoded: int = Field(..., ge=0, le=2)
 
 
@@ -334,6 +338,8 @@ def predict_consumption(payload: dict, model: ModelChoice = Query("ensemble")):
 
     ensemble_pred = _predict_ensemble(seq.rows, CONSUMPTION_TARGET, lstm_pred)
     return ConsumptionPrediction(predicted_consumption_kwh=ensemble_pred)
+
+
 
 
 
