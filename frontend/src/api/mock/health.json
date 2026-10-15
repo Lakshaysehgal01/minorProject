@@ -1,0 +1,18 @@
+{
+  "status": "ok",
+  "components": {
+    "mongo": { "up": true },
+    "ml": { "up": true, "modelsLoaded": true },
+    "chain": {
+      "up": true,
+      "chainId": 31337,
+      "blockNumber": 26,
+      "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "tradeCount": 0
+    },
+    "chainDbSync": { "ok": true, "onChainTradeCount": 0, "dbConfirmedTrades": 0 }
+  }
+}
+
+
+

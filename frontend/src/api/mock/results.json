@@ -1,0 +1,35 @@
+{
+  "solar": {
+    "file": "solar_model_comparison.csv",
+    "generatedAt": "2026-10-14T23:29:00.000Z",
+    "rows": [
+      { "Model": "LGBMRegressor", "RMSE": 0.4608, "MSE": 0.2124, "MAE": 0.2050, "R2": 0.9578 },
+      { "Model": "XGBRegressor", "RMSE": 0.5199, "MSE": 0.2703, "MAE": 0.2498, "R2": 0.9462 },
+      { "Model": "CatBoostRegressor", "RMSE": 0.5321, "MSE": 0.2831, "MAE": 0.2925, "R2": 0.9437 },
+      { "Model": "RandomForestRegressor", "RMSE": 0.5507, "MSE": 0.3033, "MAE": 0.2472, "R2": 0.9397 },
+      { "Model": "DecisionTreeRegressor", "RMSE": 0.8136, "MSE": 0.6619, "MAE": 0.3021, "R2": 0.8684 },
+      { "Model": "Prophet_hh4_small", "RMSE": 0.3483, "MSE": 0.1213, "MAE": 0.2509, "R2": 0.7484 },
+      { "Model": "Prophet_hh0_medium", "RMSE": 1.1598, "MSE": 1.3452, "MAE": 0.8647, "R2": 0.7477 },
+      { "Model": "Prophet_hh3_large", "RMSE": 1.3193, "MSE": 1.7405, "MAE": 1.0232, "R2": 0.6113 },
+      { "Model": "LinearRegression", "RMSE": 2.8127, "MSE": 7.9110, "MAE": 2.1011, "R2": -0.5731 }
+    ]
+  },
+  "consumption": {
+    "file": "consumption_model_comparison.csv",
+    "generatedAt": "2026-10-14T23:29:00.000Z",
+    "rows": [
+      { "Model": "LGBMRegressor", "RMSE": 0.2467, "MSE": 0.0609, "MAE": 0.1918, "R2": 0.9102 },
+      { "Model": "CatBoostRegressor", "RMSE": 0.2473, "MSE": 0.0612, "MAE": 0.1924, "R2": 0.9098 },
+      { "Model": "XGBRegressor", "RMSE": 0.2544, "MSE": 0.0647, "MAE": 0.1978, "R2": 0.9045 },
+      { "Model": "RandomForestRegressor", "RMSE": 0.2561, "MSE": 0.0656, "MAE": 0.1982, "R2": 0.9032 },
+      { "Model": "Prophet_hh3_large", "RMSE": 0.3212, "MSE": 0.1031, "MAE": 0.2586, "R2": 0.8746 },
+      { "Model": "DecisionTreeRegressor", "RMSE": 0.3563, "MSE": 0.1270, "MAE": 0.2776, "R2": 0.8127 },
+      { "Model": "Prophet_hh0_medium", "RMSE": 0.3890, "MSE": 0.1513, "MAE": 0.3299, "R2": 0.5982 },
+      { "Model": "Prophet_hh4_small", "RMSE": 0.3141, "MSE": 0.0987, "MAE": 0.2518, "R2": 0.4920 },
+      { "Model": "LinearRegression", "RMSE": 0.6115, "MSE": 0.3739, "MAE": 0.4933, "R2": 0.4484 }
+    ]
+  }
+}
+
+
+

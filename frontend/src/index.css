@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+
+/* Projector legibility: everything scales from an 18px root (Tailwind sizes are rem-based). */
+html {
+  font-size: 18px;
+}
+
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+
+.recharts-text {
+  font-size: 14px;
+}
+
+
+

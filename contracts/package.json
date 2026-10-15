@@ -1,0 +1,20 @@
+{
+  "name": "energy-trading-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EnergyTrading smart contract (local Hardhat chain only)",
+  "scripts": {
+    "chain": "hardhat node --hostname 127.0.0.1 --port 8545",
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network localhost",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "hardhat": "^2.22.0"
+  }
+}
+
+
+
