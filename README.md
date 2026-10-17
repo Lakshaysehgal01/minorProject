@@ -153,6 +153,7 @@ Other scripts: `npm run start:all`, `npm run test:contracts`, `npm run test:back
 ```
 .
 ├── ml-service/        ML pipeline + FastAPI prediction service (Part I, §1–§13)
+│   ├── README.md      ML service documentation: models, pipeline, training & endpoints
 │   ├── data/          weather download + synthetic data generator
 │   ├── models/        training scripts; trained_models/ and metrics/ are gitignored
 │   ├── results/       model comparison CSVs/charts (gitignored except the script)
@@ -160,10 +161,11 @@ Other scripts: `npm run start:all`, `npm run test:contracts`, `npm run test:back
 │   ├── train.py       Phase 1 baselines
 │   └── STEPS.md       exact reproduction steps
 ├── contracts/         Hardhat project: EnergyTrading.sol, tests, deploy script (§14)
+│   └── README.md      Smart contracts documentation: architecture, tests & deployment
 ├── backend/           Express + TypeScript + Mongoose + ethers API (§15)
-│   └── README.md      backend details: API table, definitions, behaviour notes
+│   └── README.md      Backend documentation: API table, fallback engine, matching & definitions
 ├── frontend/          React + TypeScript + Vite + Tailwind + recharts dashboard (§16)
-│   └── README.md      frontend details: env vars, mock mode, design notes
+│   └── README.md      Frontend documentation: dashboard tabs, P2P network graph & mock mode
 ├── scripts/
 │   └── start-all.js   one-command launcher for the whole stack (npm run start:all)
 ├── package.json       root scripts that delegate to contracts/, backend/, frontend/
@@ -1069,9 +1071,11 @@ is in [`backend/README.md`](backend/README.md); the essentials:
 
 1. Read the 25 households' rows for that hour from `energy_data.csv`: weather
    inputs, panel size, tier, holiday flag, and the *actual* meter values.
-2. Call the ML service for each household's solar and consumption (single-row
-   models, 5 s timeout, predictions clamped to ≥ 0) and save them as
-   `Prediction` documents.
+2. Call the ML service for each household's solar and consumption with an
+   automated fallback mechanism (tries the active model, e.g. `ensemble`, and
+   gracefully cascades down the fallback order `ensemble` → `lstm` → `lightgbm`
+   → `xgboost` if history is unavailable or an error occurs; predictions clamped
+   to ≥ 0) and save them as `Prediction` documents.
 3. `surplus = predicted solar − predicted consumption`. A household with a
    surplus above `MIN_KWH` (default 0.5) is a seller, one with a deficit above
    it is a buyer. Greedily match the largest remaining seller with the largest
@@ -1099,7 +1103,7 @@ is in [`backend/README.md`](backend/README.md); the essentials:
 | GET | `/stats` | all-time totals, savings, MAE, simulation progress |
 | GET | `/results/models` | the model comparison tables from `ml-service/results` |
 | GET | `/models/active` | the model in use per target (also returned as `models` by `/forecast`) |
-| GET | `/health` | MongoDB, ML service (a real probe prediction), chain, and chain/DB sync |
+| GET | `/health` | MongoDB, ML service (a real probe prediction with active model reporting), chain, and chain/DB sync |
 
 Errors return `{ "error": "..." }` with 400 (validation), 404 (no data yet),
 409 (busy / replay finished / chain and DB out of sync), 502 (bad ML
@@ -1160,15 +1164,16 @@ large fonts for projecting in a classroom. Details in
 [`frontend/README.md`](frontend/README.md).
 
 **Dashboard tab:** header with the date picker (limited to the replay range),
-live connection badges (backend / ML service / chain) and **Run Next Day** /
-**Run 1 Hour** buttons; KPI cards for the selected day (predicted vs actual
-generation and consumption, energy traded, % of deficit met by P2P, simulated
-savings); a 25-household picker with on-chain balances; predicted-vs-actual
-solar and consumption charts and a net surplus/deficit bar chart, with data
-outage/fault hours highlighted so they are not mistaken for model error; a
-next-day forecast panel; a paginated trades table (with a copyable transaction
-hash and an "only this household" toggle); and a sortable on-chain balances
-table.
+live connection badges showing the backend, chain, and active ML model
+(e.g., `ML service: ok (ensemble)`) and **Run Next Day** / **Run 1 Hour** buttons;
+KPI cards for the selected day (predicted vs actual generation and consumption,
+energy traded, % of deficit met by P2P, simulated savings); a 25-household picker
+with on-chain balances; predicted-vs-actual solar and consumption charts and a
+net surplus/deficit bar chart; a next-day forecast panel; a paginated trades table;
+an interactive **P2P Energy Trading Network Graph** (displaying microgrid households
+as house symbol nodes with directional green incoming and red outgoing trade arrows,
+hourly scrubbing, automated `▶ Play Day` animation, and Network Ring vs Hub views);
+and a sortable on-chain balances table.
 
 **Model Results tab:** the solar and consumption comparison tables (highest R²
 highlighted), R² bar charts whose axis starts near the worst model so

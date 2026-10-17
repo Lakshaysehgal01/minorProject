@@ -1,97 +1,141 @@
-# Dashboard (frontend)
+# Frontend Dashboard (`frontend/`)
 
+A responsive, high-contrast single-page web application built with **React 19**, **TypeScript**, **Vite**, **Tailwind CSS v4**, and **Recharts** to monitor and control the Smart Energy Microgrid Trading platform.
 
-React + TypeScript + Vite single-page dashboard for the Smart Energy Microgrid Trading demo. Two tabs, **Dashboard** and **Model Results**, light high-contrast theme sized for a projector. It only reads from the backend's HTTP API; nothing in `/backend` or `/ml-service` is changed by it.
+---
 
+## 1. Features & Pages
 
-Stack: React 19, TypeScript (strict), Vite, Tailwind CSS v4, recharts, axios.
+The application is structured into two main navigation tabs:
 
+### 1. Dashboard Tab (`DashboardPage.tsx`)
+- **Service Status Strip:** Real-time health badges for the Backend, ML service (showing the active model, e.g. `ok (ensemble)`), and Ethereum Hardhat blockchain.
+- **Daily Summary KPI Row:** Key performance indicators covering solar generation, household consumption, P2P energy traded, realized financial savings, and prediction error (MAE).
+- **Interactive Household Picker:** Select any of the 25 households (`#0` to `#24`) to inspect individual performance.
+- **Hourly Prediction vs Actual Charts:** Recharts line charts comparing predicted generation/load against actual smart-meter readings.
+- **Net Surplus / Deficit Chart:** Hourly bar chart showing surplus solar generation available for peer-to-peer trading.
+- **Day-Ahead Forecast Panel:** Solar and consumption projection for the following 24 hours.
+- **Trades Card (`TradesTable.tsx`):** Paginated tabular log of executed peer-to-peer trades with slot timestamps, seller/buyer IDs, energy volume (kWh), agreed price, total value, transaction status, and on-chain transaction hashes.
+- **Interactive P2P Trading Network Graph (`TradesNetworkGraph.tsx`):**
+  - Graph visualization placed directly below the Trades Card.
+  - **House Symbol Nodes:** Microgrid households are represented by clean SVG house symbols.
+  - **Trade Flow Color Coding:**
+    - 🟢 **Green Arrows:** Incoming energy purchased by the household.
+    - 🔴 **Red Arrows:** Outgoing energy sold by the household.
+  - **Zero-Jitter Hit Area:** Fixed transparent hit-testing circles ensure smooth, flicker-free mouse interaction.
+  - **View Modes:**
+    - **Network Ring:** 25-house circular perimeter with curved directional energy chords.
+    - **Hub View:** Centers the selected household with its active trading partners arranged radially.
+  - **Time Scrubber & Animation:** Hour buttons (`00:00` to `23:00`), "All 24 Hours", and a **`▶ Play Day`** button to automatically animate hourly energy transfers.
+  - **Click-to-Select:** Clicking any house node switches the selected household across the whole dashboard.
+- **On-Chain Balances Table (`BalancesTable.tsx`):** Displays real-time double-entry energy (kWh) and token (INR) balances retrieved directly from the Solidity smart contract.
 
-## Install and run
+### 2. Model Results Tab (`ModelResultsPage.tsx`)
+- Comprehensive benchmark comparison across all evaluated ML models (Baselines, LightGBM, CatBoost, LSTM, Stacking Ensemble, and Prophet).
+- Displays RMSE, MAE, and $R^2$ scores, alongside visual bar charts highlighting model accuracy improvements.
 
+---
 
+## 2. Tech Stack
+
+- **Framework:** React 19 + TypeScript (strict mode)
+- **Bundler & Dev Server:** Vite 8 (pinned to port `5173`)
+- **Styling:** Tailwind CSS v4 (clean, high-contrast light theme)
+- **Charts:** Recharts
+- **HTTP Client:** Axios (with custom mock adapter support)
+
+---
+
+## 3. Getting Started
+
+### Installation
+From the repository root:
+```bash
+npm --prefix frontend install
 ```
-cd frontend
+Or directly inside `frontend/`:
+```bash
 npm install
-copy .env.example .env      # (cp on macOS/Linux)
-npm run dev                 # http://localhost:5173
 ```
 
+### Development Server
+```bash
+npm run dev
+# Starts local dev server at http://localhost:5173
+```
 
-`npm run build` type-checks and produces `dist/`.
+> **Strict Port 5173:** The backend CORS policy permits requests from `http://localhost:5173`. If port 5173 is occupied, Vite will report an error rather than silently hopping to port 5174.
 
+### Production Build
+Type-checks TypeScript and compiles production assets to `dist/`:
+```bash
+npm run build
+```
 
-The dev server is pinned to **port 5173** (`strictPort`): the backend only allows CORS from `http://localhost:5173`, so if the port is busy Vite fails instead of silently moving to 5174.
+---
 
+## 4. Environment Variables (`.env`)
 
-### Environment
+Copy `frontend/.env.example` to `frontend/.env`:
 
-
-| Variable | Default | Meaning |
+| Variable | Default | Purpose |
 |---|---|---|
-| `VITE_API_URL` | `http://localhost:4000` | Backend base URL. The backend listens on **4000** by default (not 5000); change this if you changed `PORT` in `backend/.env`. |
-| `VITE_USE_MOCK` | `false` | `true` serves generated demo data inside the browser. |
+| `VITE_API_URL` | `http://localhost:4000` | Backend API base URL |
+| `VITE_USE_MOCK` | `false` | When `true`, runs the dashboard entirely in mock mode |
 
+---
 
-## Demo order (real data)
+## 5. Mock Mode (Stand-alone Demo)
 
+You can launch and explore the full frontend without running MongoDB, the Hardhat node, or the Python ML service:
 
-1. Hardhat node: `npm run chain` (repo root)
-2. Deploy the contract: `npm run deploy` (repo root)
-3. ML service: `uvicorn api.main:app --port 8000` from `ml-service/` with its venv active
-4. MongoDB reachable (local or Atlas; `MONGO_URI` in `backend/.env`)
-5. Backend: `npm run dev` (repo root)
-6. Frontend: `npm run dev:frontend` (repo root) or `npm run dev` in `frontend/`
-7. Open http://localhost:5173 and click **Run Next Day**
-
-
-For a clean demo start, call `POST /simulate/reset` on the backend, and restart the Hardhat node and redeploy so the on-chain ledger is empty too (the backend refuses to run while Mongo is ahead of the chain).
-
-
-Check the green/red connection badges in the header first. They come from `GET /health`, which does a real probe prediction against the ML service.
-
-
-## Mock mode
-
-
-```
-npm run dev:mock            # cross-platform; sets VITE_USE_MOCK=true
+```bash
+npm run dev:mock       # from frontend/ or repo root
 ```
 
+In mock mode:
+- A custom in-browser Axios adapter (`src/api/mock/`) simulates backend responses.
+- Generates realistic 25-household data, historical simulated days, predictions, and on-chain mock trades.
+- Clicking **Run Next Day** advances the simulated date with simulated latency.
+- An amber indicator badge in the header clearly indicates mock mode.
 
-Requests are answered in the browser by a custom axios adapter (`src/api/mock`), so the UI code is identical in both modes. Data is deterministic and built the same way as the real system (greedy matching, savings, anomaly flags, 25 households with the real tiers and panel sizes). It starts with two days already simulated; **Run Next Day** takes about 3 s and advances the mock cursor. An amber banner marks mock mode.
+---
 
-
-Extra switches for testing empty/error states (set in `.env.local`):
-- `VITE_MOCK_HEALTH=degraded`: the health call returns 503 with the ML service down
-- `VITE_MOCK_NO_RESULTS=true`: `/results/models` returns 404
-
-
-## Things worth knowing
-
-
-- **Time:** the backend stores naive local time as UTC. The UI never converts to the browser's time zone, so hours read 00:00 to 23:00 on any laptop.
-- **Run Next Day** completes the current simulated day (if you ran single hours first, it finishes that day). A day is one ~30 s request; there is no progress endpoint, so the header shows an elapsed timer instead of a percentage.
-- **Savings** are labelled "simulated savings (assumed tariffs)": realized savings after forecast-error penalties, with gross savings and the perfect-foresight upper bound underneath.
-- **% deficit met by P2P is low** because there is no storage: trades only happen in shoulder hours when some homes have a surplus and others a deficit.
-- **Forecast** uses the dataset's weather columns as input. A real deployment would need a weather forecast API.
-- **Household trades on a date:** `GET /trades/household/:id` has no date filter, so the toggle fetches the household's trades and filters by the selected date in the browser.
-- Each section loads independently: one failing endpoint shows an inline message in that section only. Responses are cached per date/household and cleared after every simulation run; there is no polling.
-- **Model Results** reads CSVs produced by `python results/model_comparison.py` in `ml-service`. If they are missing the tab shows "Run the ML training and model_comparison.py to generate results."
-
-
-## Structure
-
+## 6. Directory Structure
 
 ```
-src/
-  api/         axios instance, typed endpoint functions, mock adapter + data
-  components/  KPI cards, charts, tables, header, async-state wrapper
-  hooks/       one hook per resource (useSummary, useTrades, ...), useSimulation
-  pages/       DashboardPage, ModelResultsPage
-  types/       API types, taken from the backend's response shapes
-  utils/       formatting, UTC date helpers, chart data transforms, cache
+frontend/src/
+├── api/
+│   ├── client.ts              # Axios instance configuration
+│   ├── endpoints.ts           # Typed API endpoint functions
+│   └── mock/                  # Standalone mock adapter and data generator
+├── components/
+│   ├── ActiveModelsCard.tsx   # Model selection cards
+│   ├── AsyncState.tsx         # Loading, error, and empty-state wrapper
+│   ├── Badge.tsx              # Colored status badges
+│   ├── BalancesTable.tsx      # On-chain smart contract balance table
+│   ├── ForecastPanel.tsx      # Day-ahead forecast charts
+│   ├── Header.tsx             # App header, simulation controls, status badges
+│   ├── HealthBadges.tsx       # Live status indicators (Backend, ML, Chain)
+│   ├── HouseholdPicker.tsx    # Household selector buttons
+│   ├── KpiRow.tsx             # Daily summary KPI cards
+│   ├── NetChart.tsx           # Net surplus / deficit bar chart
+│   ├── PredActualChart.tsx    # Predicted vs actual generation/load charts
+│   ├── Section.tsx            # Standard card section container
+│   ├── TradesNetworkGraph.tsx # P2P energy trading network graph visual
+│   └── TradesTable.tsx        # Paginated trades log table
+├── hooks/
+│   ├── EpochContext.tsx       # Global simulation refresh context
+│   ├── resources.ts           # Cached data hooks (useSummary, useAllTradesForDate, ...)
+│   ├── useResource.ts         # Generic cached resource fetcher
+│   └── useSimulation.ts       # Simulation action hook (runDay, reset)
+├── pages/
+│   ├── DashboardPage.tsx      # Main microgrid trading dashboard
+│   └── ModelResultsPage.tsx   # Model evaluation and comparison page
+├── types/
+│   └── api.ts                 # TypeScript interfaces matching backend response schemas
+└── utils/
+    ├── chartData.ts           # Time-series transformations for Recharts
+    ├── date.ts                # UTC date manipulation helpers
+    └── format.ts              # Currency (Rs.), energy (kWh), and percentage formatters
 ```
-
-
-
