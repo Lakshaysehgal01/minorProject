@@ -45,6 +45,18 @@ export const useTrades = (date: string | null, page: number, limit: number, enab
   );
 
 
+export const useAllTradesForDate = (date: string | null) =>
+  useResource<Trade[]>(date ? `alltrades:${date}` : null, async (signal) => {
+    const all: Trade[] = [];
+    for (let page = 1; ; page++) {
+      const res = await getTrades({ page, limit: 500, date: date as string }, signal);
+      all.push(...res.trades);
+      if (res.trades.length === 0 || all.length >= res.total) break;
+    }
+    return all;
+  });
+
+
 // /trades/household/:id has no date filter, so fetch all of the household's trades (pages of 500)
 // and let the caller filter by date client-side.
 export const useHouseholdTrades = (householdId: number | null, enabled = true) =>

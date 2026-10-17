@@ -9,6 +9,7 @@ import { NetChart } from "../components/NetChart";
 import { PredActualChart } from "../components/PredActualChart";
 import { Section } from "../components/Section";
 import { TradesTable } from "../components/TradesTable";
+import { TradesNetworkGraph } from "../components/TradesNetworkGraph";
 import { usePredictions, useSummary } from "../hooks/resources";
 import type { Resource } from "../hooks/useResource";
 import type { HealthResponse, Household } from "../types/api";
@@ -78,6 +79,12 @@ export function DashboardPage({ date, householdId, onHouseholdChange, households
 
       <TradesTable date={date} householdId={householdId} />
 
+      <TradesNetworkGraph
+        date={date}
+        householdId={householdId}
+        onSelectHousehold={onHouseholdChange}
+        households={households}
+      />
 
       <BalancesTable households={households} selected={householdId} />
     </div>
