@@ -37,6 +37,7 @@ export async function getHealth() {
 
 
   const healthy = mongo.up && ml.up && ml.modelsLoaded && chain.up && sync.ok === true;
+  // ml.activeModel is the model that actually served the probe prediction (may be a fallback model)
   return { status: healthy ? "ok" : "degraded", components: { mongo, ml, chain, chainDbSync: sync } };
 }
 

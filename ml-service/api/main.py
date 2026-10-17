@@ -165,6 +165,11 @@ class SolarSequenceRow(SolarRequest):
 
 
 class ConsumptionSequenceRow(ConsumptionRequest):
+    # day_of_year is required by add_cyclical_features() in train_lstm.py (it computes
+    # doy_sin/doy_cos unconditionally even though the consumption LSTM's cyclical_cols
+    # only uses hour_sin/hour_cos/dow_sin/dow_cos). It is NOT part of ConsumptionRequest
+    # because the tabular consumption models don't need it.
+    day_of_year: int = Field(..., ge=1, le=365)
     consumption_kwh: float = Field(..., ge=0)
 
 
@@ -262,8 +267,24 @@ def _predict_ensemble(rows, target, lstm_pred):
         preds[name] = float(models[f"ensemble_{name}_{slug}"].predict(last_row_df)[0])
 
 
-    ordered = [[preds[name] for name in base_model_order]]
-    return float(ridge.predict(ordered)[0])
+    if hasattr(ridge, "feature_names_in_"):
+        cols = list(ridge.feature_names_in_)
+        row_dict = {}
+        for c in cols:
+            model_key = c[5:] if c.startswith("pred_") else c
+            if c in preds:
+                row_dict[c] = preds[c]
+            elif model_key in preds:
+                row_dict[c] = preds[model_key]
+            else:
+                row_dict[c] = 0.0
+        ordered_df = pd.DataFrame([row_dict], columns=cols)
+    else:
+        pred_cols = [f"pred_{name}" for name in base_model_order]
+        row_dict = {f"pred_{name}": preds[name] for name in base_model_order}
+        ordered_df = pd.DataFrame([row_dict], columns=pred_cols)
+
+    return float(ridge.predict(ordered_df)[0])
 
 
 

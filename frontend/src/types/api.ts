@@ -209,7 +209,7 @@ export interface HealthResponse {
   status: "ok" | "degraded";
   components: {
     mongo: { up: boolean; error?: string };
-    ml: { up: boolean; modelsLoaded: boolean; error?: string };
+    ml: { up: boolean; modelsLoaded: boolean; activeModel?: string; error?: string };
     chain: { up: boolean; blockNumber?: number; tradeCount?: number; error?: string };
     chainDbSync: { ok: boolean | null; reason?: string; onChainTradeCount?: number; dbConfirmedTrades?: number };
   };

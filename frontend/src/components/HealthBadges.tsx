@@ -27,13 +27,18 @@ function buildPills(health: Resource<HealthResponse>): Pill[] {
   const mongoNote = `MongoDB: ${mongo.up ? "up" : `down (${mongo.error ?? "unknown"})`}`;
   const syncNote =
     chainDbSync.ok === false ? ` Chain/DB out of sync: ${chainDbSync.reason ?? ""}` : "";
+  const mlState = (() => {
+    if (!ml.up) return "down";
+    if (!ml.modelsLoaded) return "no models";
+    return ml.activeModel ? `ok (${ml.activeModel})` : "ok";
+  })();
   return [
     { name: "Backend", tone: mongo.up ? "green" : "amber", state: mongo.up ? "online" : "degraded", detail: mongoNote },
     {
       name: "ML service",
       tone: ml.up && ml.modelsLoaded ? "green" : "red",
-      state: ml.up && ml.modelsLoaded ? "ok" : ml.up ? "no models" : "down",
-      detail: ml.error ?? "Model probe prediction succeeded",
+      state: mlState,
+      detail: ml.error ?? (ml.activeModel ? `Serving predictions with: ${ml.activeModel}` : "Model probe prediction succeeded"),
     },
     {
       name: "Chain",

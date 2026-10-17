@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { AsyncState } from "../components/AsyncState";
 import { BalancesTable } from "../components/BalancesTable";
 import { ForecastPanel } from "../components/ForecastPanel";
+import { HealthBadges } from "../components/HealthBadges";
 import { HouseholdPicker } from "../components/HouseholdPicker";
 import { KpiRow } from "../components/KpiRow";
 import { NetChart } from "../components/NetChart";
@@ -10,7 +11,7 @@ import { Section } from "../components/Section";
 import { TradesTable } from "../components/TradesTable";
 import { usePredictions, useSummary } from "../hooks/resources";
 import type { Resource } from "../hooks/useResource";
-import type { Household } from "../types/api";
+import type { HealthResponse, Household } from "../types/api";
 import { toHourSeries } from "../utils/chartData";
 
 
@@ -19,13 +20,14 @@ interface Props {
   householdId: number;
   onHouseholdChange: (id: number) => void;
   households: Resource<Household[]>;
+  health: Resource<HealthResponse>;
 }
 
 
-const NOT_SIMULATED = "Not simulated yet for this date. Click “Run Next Day” to simulate it.";
+const NOT_SIMULATED = "Not simulated yet for this date. Click \u201cRun Next Day\u201d to simulate it.";
 
 
-export function DashboardPage({ date, householdId, onHouseholdChange, households }: Props) {
+export function DashboardPage({ date, householdId, onHouseholdChange, households, health }: Props) {
   const summary = useSummary(date);
   const predictions = usePredictions(householdId, date);
   const series = useMemo(() => (predictions.data ? toHourSeries(predictions.data.hours) : []), [predictions.data]);
@@ -36,6 +38,12 @@ export function DashboardPage({ date, householdId, onHouseholdChange, households
 
   return (
     <div className="space-y-6">
+      {/* Service status strip — shows ML model in use, chain, backend */}
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Service status</p>
+        <HealthBadges health={health} />
+      </div>
+
       <Section title={`Daily summary${date ? `: ${date}` : ""}`} subtitle="Simulated from replayed meter data; predictions come from the live ML service.">
         <KpiRow summary={summary} />
       </Section>

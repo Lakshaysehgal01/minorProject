@@ -60,28 +60,46 @@ function rankedFromCsv(target: Target): Ranked[] {
 
 
 let selected: Record<Target, Selection> | null = null;
+// Full ranked list per target (used for fallback). For pinned models, this is a single-entry list.
+let fallbackOrder: Record<Target, ModelName[]> | null = null;
 
 
-function pick(target: Target, configured: ModelName | "auto"): Selection {
-  if (configured !== "auto") return { model: configured, r2: null, source: "pinned" };
-  const best = rankedFromCsv(target)[0];
+function pick(target: Target, configured: ModelName | "auto"): { selection: Selection; order: ModelName[] } {
+  if (configured !== "auto") {
+    return { selection: { model: configured, r2: null, source: "pinned" }, order: [configured] };
+  }
+  const ranked = rankedFromCsv(target);
+  const best = ranked[0];
   console.log(`[models] ${target}: auto-selected ${best.model} (highest test R2 among servable models: ${best.r2.toFixed(4)})`);
-  return { model: best.model, r2: best.r2, source: "auto" };
+  // Deduplicate in case the same model appears twice (shouldn't happen, but guard it)
+  const seen = new Set<ModelName>();
+  const order: ModelName[] = [];
+  for (const r of ranked) {
+    if (!seen.has(r.model)) { seen.add(r.model); order.push(r.model); }
+  }
+  return { selection: { model: best.model, r2: best.r2, source: "auto" }, order };
 }
 
 
 // Call once at startup, before any prediction. Throws if `auto` cannot be resolved.
 export function resolveModels(): void {
-  selected = {
-    solar: pick("solar", config.ML_MODEL_SOLAR),
-    consumption: pick("consumption", config.ML_MODEL_CONSUMPTION),
-  };
+  const solar = pick("solar", config.ML_MODEL_SOLAR);
+  const consumption = pick("consumption", config.ML_MODEL_CONSUMPTION);
+  selected = { solar: solar.selection, consumption: consumption.selection };
+  fallbackOrder = { solar: solar.order, consumption: consumption.order };
 }
 
 
 export function getSelection(target: Target): Selection {
   if (!selected) throw new Error("Models not resolved yet: resolveModels() must run at startup.");
   return selected[target];
+}
+
+
+/** Ordered list of models to try for a target, best-first. Falls back down if a model fails. */
+export function getFallbackOrder(target: Target): ModelName[] {
+  if (!fallbackOrder) throw new Error("Models not resolved yet: resolveModels() must run at startup.");
+  return fallbackOrder[target];
 }
 
 

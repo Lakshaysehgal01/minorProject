@@ -173,7 +173,7 @@ async function main() {
 
 
   log("launcher", "3/5 starting ML service...");
-  const ml = start("ml", `"${python}"`, ["-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", "8000"], path.join(ROOT, "ml-service"));
+  const ml = start("ml", `"${python}"`, ["-m", "uvicorn", "api.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"], path.join(ROOT, "ml-service"));
   // Loading every trained model (and importing TensorFlow) can take several minutes.
   await waitFor("ML service", async () => (await fetch("http://127.0.0.1:8000/health")).ok, 600_000, ml);
 

@@ -17,6 +17,12 @@ const schema = z
     PORT: z.coerce.number().int().positive().default(4000),
     MONGO_URI: z.string().min(1, "MONGO_URI is required (see .env.example)"),
     ML_SERVICE_URL: z.string().url().default("http://localhost:8000"),
+    // Per-request timeouts to the ML service. lstm/ensemble run TensorFlow (the first call is slow),
+    // so they get a much longer limit than the single-row boosters.
+    ML_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+    ML_SEQUENCE_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+    // Max simultaneous households when lstm/ensemble is in use (1 = fully sequential, safest).
+    ML_SEQUENCE_CONCURRENCY: z.coerce.number().int().min(1).max(25).default(1),
     ML_MODEL: modelChoice.default("auto"),
     ML_MODEL_SOLAR: modelChoice.optional(),
     ML_MODEL_CONSUMPTION: modelChoice.optional(),

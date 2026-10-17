@@ -85,7 +85,7 @@ function Shell() {
 
       <main className="mx-auto max-w-[1500px] px-5 py-6">
         {tab === "dashboard" ? (
-          <DashboardPage date={date} householdId={householdId} onHouseholdChange={setHouseholdId} households={households} />
+          <DashboardPage date={date} householdId={householdId} onHouseholdChange={setHouseholdId} households={households} health={health} />
         ) : (
           <ModelResultsPage stats={stats} />
         )}
