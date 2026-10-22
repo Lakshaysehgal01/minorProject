@@ -72,18 +72,24 @@ function getHistoryIfAvailable(row: HouseholdRow): HouseholdRow[] | null {
 }
 
 
-export function solarBody(row: HouseholdRow, model: string, history: HouseholdRow[] | null) {
+export function solarBody(row: HouseholdRow, model: string, history?: HouseholdRow[] | null) {
   if (!isSequenceModel(model)) return solarPayload(row);
-  if (!history) return null; // signal: cannot build sequence payload
-  return { rows: history.map((r) => ({ ...solarPayload(r), solar_generation_kwh: r.actualSolarKwh })) };
+  const hist = history !== undefined ? history : getHistoryIfAvailable(row);
+  if (!hist) {
+    throw httpError(422, `Model ${model} requires 24 hours of history, but none available for household ${row.householdId} at ${new Date(row.timestampMs).toISOString()}`);
+  }
+  return { rows: hist.map((r) => ({ ...solarPayload(r), solar_generation_kwh: r.actualSolarKwh })) };
 }
 
 
-export function consumptionBody(row: HouseholdRow, model: string, history: HouseholdRow[] | null) {
+export function consumptionBody(row: HouseholdRow, model: string, history?: HouseholdRow[] | null) {
   if (!isSequenceModel(model)) return consumptionPayload(row);
-  if (!history) return null; // signal: cannot build sequence payload
+  const hist = history !== undefined ? history : getHistoryIfAvailable(row);
+  if (!hist) {
+    throw httpError(422, `Model ${model} requires 24 hours of history, but none available for household ${row.householdId} at ${new Date(row.timestampMs).toISOString()}`);
+  }
   return {
-    rows: history.map((r) => ({
+    rows: hist.map((r) => ({
       ...consumptionPayload(r),
       // day_of_year is required by the LSTM's add_cyclical_features() even though
       // the consumption tabular models don't use it — it computes doy_sin/doy_cos

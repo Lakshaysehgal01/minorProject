@@ -201,3 +201,40 @@ The stacking ensemble combines predictions from XGBoost, LightGBM, and the LSTM.
 - `pred_lstm`
 
 `api/main.py` dynamically aligns prediction dictionaries against `ridge.feature_names_in_` to ensure strict dimensional and column alignment at runtime without sklearn schema mismatch errors.
+
+---
+
+## 8. Benchmark Evaluation Results (`results/`)
+
+Results measured on the 73-day held-out test split (Oct 20 – Dec 31) from `results/{solar,consumption}_model_comparison.csv`:
+
+### Solar Generation (`solar_generation_kwh`)
+| Rank | Model | RMSE | MAE | R² |
+|---|---|---|---|---|
+| 1 | **Ensemble** | 0.3572 | 0.1514 | **0.9746** |
+| 2 | LSTM | 0.3589 | 0.1529 | 0.9743 |
+| 3 | LGBMRegressor | 0.4608 | 0.2050 | 0.9578 |
+| 4 | XGBRegressor | 0.5199 | 0.2498 | 0.9462 |
+| 5 | CatBoostRegressor | 0.5321 | 0.2925 | 0.9437 |
+| 6 | RandomForestRegressor | 0.5507 | 0.2472 | 0.9397 |
+| 7 | DecisionTreeRegressor | 0.8136 | 0.3021 | 0.8684 |
+| 8 | Prophet (hh4, small) | 0.3483 | 0.2509 | 0.7484 |
+| 9 | Prophet (hh0, medium) | 1.1598 | 0.8647 | 0.7477 |
+| 10 | Prophet (hh3, large) | 1.3193 | 1.0232 | 0.6113 |
+| 11 | LinearRegression | 2.8127 | 2.1011 | −0.5731 |
+
+### Consumption (`consumption_kwh`)
+| Rank | Model | RMSE | MAE | R² |
+|---|---|---|---|---|
+| 1 | **Ensemble** | 0.1888 | 0.1440 | **0.9474** |
+| 2 | LSTM | 0.1954 | 0.1491 | 0.9437 |
+| 3 | LGBMRegressor | 0.2467 | 0.1918 | 0.9102 |
+| 4 | CatBoostRegressor | 0.2473 | 0.1924 | 0.9098 |
+| 5 | XGBRegressor | 0.2544 | 0.1978 | 0.9045 |
+| 6 | RandomForestRegressor | 0.2561 | 0.1982 | 0.9032 |
+| 7 | Prophet (hh3, large) | 0.3212 | 0.2586 | 0.8746 |
+| 8 | DecisionTreeRegressor | 0.3563 | 0.2776 | 0.8127 |
+| 9 | Prophet (hh0, medium) | 0.3890 | 0.3299 | 0.5982 |
+| 10 | Prophet (hh4, small) | 0.3141 | 0.2518 | 0.4920 |
+| 11 | LinearRegression | 0.6115 | 0.4933 | 0.4484 |
+
